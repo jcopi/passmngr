@@ -169,9 +169,49 @@ class pw_manager
         return result;
     }
 
-    // async load_record_file (file: ArrayBuffer, signature: ArrayBuffer): Promise<Map<string, pw_record[]>>
-    // {
-    //     let decrypted = await this.decrypt_message(file);
-        
-    // }
+    async load_record_file (file: ArrayBuffer, signature: ArrayBuffer): Promise<Map<string, pw_record[]>>
+    {
+        let valid = await this.verify_message(file, signature);
+        if (!valid)
+            throw "File corrupted";
+        let plain = await this.decrypt_message(file);
+        let plain_str = pw_manager.buffer_to_b64(plain);
+        let result: Map<string, pw_record[]> = new Map();
+        try {
+            let obj = JSON.parse(plain_str);
+            let carr: pw_record[];
+            for (let key in obj) {
+                if (Array.isArray(obj[key])) {
+                    carr = [];
+                    obj[key].forEach(v => {
+                        if (v.hasOwnProperty("user") && v.hasOwnProperty("pass") && typeof v.user === "string" && typeof v.pass === "string") {
+                            carr.push({
+                                "user": v.user,
+                                "pass":v.pass
+                            });
+                        }
+                    });
+                    result.set(key, carr);
+                }
+            }
+        } catch (ex) {
+            throw "Invalid file";
+        }
+
+        return result;
+    }
+    async save_record_file (records: Map<string, pw_record[]>): Promise<[ArrayBuffer, ArrayBuffer]>
+    {
+        let obj = {};
+        for (let [k,v] of records) {
+            obj[k] = v;
+        }
+        let str = JSON.stringify(obj);
+        let plain = pw_manager.str_to_buffer(str);
+
+        let cipher = await this.encrypt_message(plain);
+        let signature = await this.sign_message(cipher);
+
+        return [cipher, signature];
+    }
 }
