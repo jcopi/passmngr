@@ -1,9 +1,12 @@
 {
     "compilerOptions":{
-        "target":"es6",
-        "outDir": "./build"
+        "target"     : "es6",
+        "lib"        : ["dom", "es6"],
+        "declaration": true,
+        "outDir"     : "./build"
     },
     "files": [
-        "core.ts"
+        "core.ts",
+        "test.ts"
     ]
 }

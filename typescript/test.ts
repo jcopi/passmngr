@@ -1,0 +1,1 @@
+let cr = new PassManager.Crypto("This is a sample text");
