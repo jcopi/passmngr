@@ -6,7 +6,6 @@
         "outDir"     : "./build"
     },
     "files": [
-        "core.ts",
-        "test.ts"
+        "core.ts"
     ]
 }
