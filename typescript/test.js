@@ -1,4 +1,5 @@
 import * as PassManager from "./build/core.js"
+import { PasswordRecords } from "./records.js";
 
 let pmCrypto = new PassManager.Crypto();
 async function init () {
@@ -22,5 +23,8 @@ async function init () {
 	let Td = new TextDecoder();
 	console.log("Original Message:", Td.decode(decrypted));
 }
+
+let PR = new PasswordRecords();
+
 
 init();
