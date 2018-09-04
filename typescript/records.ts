@@ -1,4 +1,4 @@
-import { StringEncoding } from "./build/core";
+import { StringEncoding } from "./build/core.js";
 
 export class UserSettings {
 
@@ -153,7 +153,7 @@ export class PasswordRecords {
     getRecords (url: string): PMRecord[] {
         return this.records.filter(r => new URLPattern(r.urlFilter).testURL(url));
     }
-    addRecord (record: PMRecord): void {
+    setRecord (record: PMRecord): void {
         this.records.push(record);
     }
 

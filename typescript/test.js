@@ -26,5 +26,4 @@ async function init () {
 
 let PR = new PasswordRecords();
 
-
 init();
