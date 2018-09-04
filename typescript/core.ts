@@ -108,6 +108,71 @@ export class StringEncoding {
         }
         return result.buffer;
     }
+    static fromUTF8 (buffer: ArrayBuffer): string {
+        let result = "";
+        let u8 = new Uint8Array(buffer);
+        for (let i = 0; i < u8.length; ++i) {
+            if (u8[i] <= 0x7F) {
+                result += String.fromCodePoint(u8[i]);
+            } else if ((u8[i] >> 5) == 0x6) {
+                // The next bytes should be part of this Unicode Code Point
+                if (u8.length < (i + 2))
+                    break;
+                if ((u8[i+1] >> 6) == 0x2) {
+                    let cp = ((u8[i] & 0x1F) << 6) | (u8[i+1] & 0x3F);
+                    result += String.fromCodePoint(cp);
+                    ++i;
+                }
+            } else if ((u8[i] >> 4) == 0xE) {
+                // The next bytes should be part of this Unicode Code Point
+                if (u8.length < (i + 3))
+                    break;
+                if (((u8[i+1] >> 6) == 0x2) && ((u8[i+2] >> 6) == 0x2)) {
+                    let cp = ((u8[i] & 0xF) << 12) | ((u8[i+1] & 0x3F) << 6) | (u8[i+2] & 0x3F);
+                    result += String.fromCodePoint(cp);
+                    i += 2;
+                }
+            } else if ((u8[i] >> 3) == 0xF) {
+                // The next bytes should be part of this Unicode Code Point
+                if (u8.length < (i + 4))
+                    break;
+                if (((u8[i+1] >> 6) == 0x2) && ((u8[i+2] >> 6) == 0x2) && ((u8[i+3] >> 6) == 0x2)) {
+                    let cp = ((u8[i] & 0x7) << 18) | ((u8[i+1] & 0x3F) << 12) | ((u8[i+2] & 0x3F) << 6) | (u8[i+3] & 0x3F);
+                    result += String.fromCodePoint(cp);
+                    i += 3;
+                }
+            }
+        }
+
+        return result;
+    }
+    static fromUTF16 (buffer: ArrayBuffer): string {
+        let result = "";
+        let u16 = new Uint16Array(buffer);
+        for (let i = 0; i < u16.length; i++) {
+            if (u16[i] < 0xD800 || u16[i] >= 0xE000) {
+                result += String.fromCodePoint(u16[i]);
+            } else {
+                if (u16.length < (i + 2))
+                    break;
+                if (((u16[i] >> 10) == 0x36) && ((u16[i+1] >> 10) == 0x37)) {
+                    let cp = ((u16[i] & 0x3FF) << 10) | (u16[i+1] & 0x3ff);
+                    cp += 0x10000;
+                    result += String.fromCodePoint(cp);
+                }
+            }
+        }
+        return result;
+    }
+    static fromUTF32 (buffer: ArrayBuffer): string {
+        let result = "";
+        let u32 = new Uint32Array(buffer);
+        for (let i = 0; i < u32.length; ++i) {
+            result += String.fromCodePoint(u32[i]);
+        }
+
+        return result;
+    }
 }
 
 export class Crypto {
@@ -231,4 +296,164 @@ export class Crypto {
     }
 }
 
-export class UserSettings {}
+export class UserSettings {
+    salt: ArrayBuffer;
+    passwordCharacters: string;
+    passwordDictionary: Map<string, number>;
+    modificationDate: Date;
+    
+    fromJSON (json: string): void {
+        let obj = JSON.parse(json);
+        
+    }
+}
+
+export class URLPattern {
+    allowSubdomain: boolean;
+    domainPattern: string[];
+
+    restrictPath: boolean;
+    pathPattern: string[];
+
+    constructor () {
+        this.allowSubdomain = false;
+        this.restrictPath = false;
+
+        this.domainPattern = [];
+        this.pathPattern = [];
+    }
+
+    fromURL(url: string): void {
+        this.allowSubdomain = false;
+        this.restrictPath = false;
+
+        let u = new URL(url);
+        this.domainPattern = u.hostname.split(".");
+        this.pathPattern = u.pathname.split("/");
+    }
+
+    setDomainPattern (allowSubs: boolean, pattern: string[]): void {
+        this.allowSubdomain = allowSubs;
+        this.domainPattern = pattern;
+    }
+
+    setPathPattern (restrictPath: boolean, pattern: string[]): void {
+        this.restrictPath = restrictPath;
+        this.pathPattern = pattern;
+    }
+
+    test (url: string): boolean {
+        let u = new URL(url);
+        let domArr = u.hostname.split(".");
+        let pathArr = u.pathname.split("/");
+
+        if (this.allowSubdomain) {
+            if (domArr.length < this.domainPattern.length)
+                return false;
+            for (let i = 0; this.domainPattern.length; ++i) {
+                let j = this.domainPattern.length - i;
+                let k = domArr.length - i;
+                if (this.domainPattern[j] == "*")
+                    continue;
+                if (this.domainPattern[j] != domArr[k])
+                    return false;
+            }
+        } else {
+            if (domArr.length != this.domainPattern.length)
+                return false;
+            for (let i = 0; i < this.domainPattern.length; ++i) {
+                if (this.domainPattern[i] == "*")
+                    continue;
+                if (this.domainPattern[i] != domArr[i])
+                    return false;
+            }
+        }
+
+        if (this.restrictPath) {
+            if (this.pathPattern.length != pathArr.length)
+                return false;
+            for (let i = 0; i < this.pathPattern.length; ++i) {
+                if (this.pathPattern[i] == "*")
+                    continue;
+                if (this.pathPattern[i] != pathArr[i])
+                    return false;
+            }
+        } else {
+            if (pathArr.length < this.pathPattern.length)
+                return false;
+            for (let i = 0; i < this.pathPattern.length; ++i) {
+                if (this.pathPattern[i] == "*")
+                    continue;
+                if (this.pathPattern[i] != pathArr[i])
+                    return false;
+            }
+        }
+
+        return true;
+    }
+    
+}
+
+
+interface PMCredential {
+    urlFilter: URLPattern;
+    tag: string;
+    username: string;
+    password: string;
+};
+
+export class Passwords {
+    passwords: PMCredential[];
+
+    constructor () {
+        this.passwords = [];
+    }
+
+    fromFile (file: ArrayBuffer): void {
+        this.passwords = [];
+
+        let cred = {};
+        let utf8 = StringEncoding.fromUTF8(file);
+        for (let i = 0, j = 0, k= 0; i < utf8.length; ++i) {
+            if (utf8[i] == "\0") {
+                switch (k) {
+                case 0:
+                    cred["urlFilter"] = utf8.substring(j,i);
+                    j = i + 1;
+                    ++k;
+                    break;
+                case 1:
+                    cred["tag"] = utf8.substring(j,i);
+                    j = i + 1;
+                    ++k;
+                    break;
+                case 2:
+                    cred["username"] = utf8.substring(j,i);
+                    j = i + 1;
+                    ++k;
+                    break;
+                case 3:
+                    cred["password"] = utf8.substring(j,i);
+                    this.passwords.push(Object(cred));
+                    j = i + 1;
+                    k = 0;
+                    break;
+                }
+            }
+        }
+    }
+
+    toFile (): ArrayBuffer {
+        let result = "";
+        this.passwords.forEach(v => {
+            for (let k in v)
+                result += v[k] + "\0";
+        });
+        return StringEncoding.toUTF8(result);
+    }
+
+    allMatching (url: string): PMCredential[] {
+        
+    }
+}
+
