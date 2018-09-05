@@ -170,3 +170,89 @@ export class PasswordRecords {
         this.fromObject(obj.filter(r => isPMRecord(r)));
     }
 }
+
+interface password_t {
+    domain: string;
+    appID: string;
+    tag: string;
+    identity: string;
+    password: string;
+    formData: object;
+}
+
+class Passwords {
+    internal: password_t[];
+
+    hasEntriesByURL(url: string): boolean {
+        let urlO = new URL(url);
+        let domain = urlO.hostname.split(".").slice(-2).join(".");
+
+        let result = false;
+        for (let i = 0; !result && i < this.internal.length; ++i) 
+            result = (domain == this.internal[i].domain);
+        return result;
+    }
+    getEntriesByURL(url: string): password_t[] {
+        let urlO = new URL(url);
+        let domain = urlO.hostname.split(".").slice(-2).join(".");
+
+        return this.internal.filter(r => (r.domain == domain));
+    }
+    editEntriesByURL(fn: (p: password_t) => password_t, url: string): void {
+        let urlO = new URL(url);
+        let domain = urlO.hostname.split(".").slice(-2).join(".");
+
+        this.internal.forEach((r, i, a) => {
+            if (r.domain == domain)
+                a[i] = fn(r);
+        });
+    }
+    removeAllEntriesOfURL(url: string): void {
+        let urlO = new URL(url);
+        let domain = urlO.hostname.split(".").slice(-2).join(".");
+
+        this.internal = this.internal.filter(r => (r.domain != domain));
+    }
+
+    filterEntriesOfURL(fn: (p: password_t) => boolean, url: string): void {
+        let urlO = new URL(url);
+        let domain = urlO.hostname.split(".").slice(-2).join(".");
+
+        this.internal = this.internal.filter(r => (r.domain != domain || fn(r)));
+    }
+
+    hasEntriesByAppID(id: string): boolean {
+        let result = false;
+        for (let i = 0; !result && i < this.internal.length; ++i) 
+            result = (id == this.internal[i].appID);
+        return result;
+    }
+    getEntriesByAppID(id: string): password_t[] {
+        return this.internal.filter(r => (r.appID == id));
+    }
+    editEntriesByAppID(fn: (p: password_t) => password_t, id: string): void {
+        this.internal.forEach((r, i, a) => {
+            if (r.appID == id)
+                a[i] = fn(r);
+        });
+    }
+    removeAllEntriesOfAppID(id: string): void {
+        this.internal = this.internal.filter(r => (r.appID != id));
+    }
+    filterEntriesOfAppID(fn: (p: password_t) => boolean, id: string): void {
+        this.internal = this.internal.filter(r => (r.appID != id || fn(r)));
+    }
+
+    newEntry(value: password_t): void {}
+
+    static recordFromObject (o: object): password_t {
+        let result = {"domain":"", "appID":"", "tag":"default", "identity":"", "password":"", "formData":{}};
+
+        for (let key in result) {
+            if (key in o && typeof o[key] == typeof result[key])
+                result[key] = o[key];
+        }
+
+        return result;
+    }
+}
