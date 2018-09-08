@@ -21,9 +21,30 @@ export class Passwords {
         return this.internal.filter(r => Passwords.domainMatch(r.domain, url));
     }
     deleteAllURL (url: string): void {
-
+        this.internal = this.internal.filter(r => !Passwords.domainMatch(r.domain, url));
     }
     filterURL (url: string, fn: (p: password_t) => boolean): void {
+        this.internal = this.internal.filter(r => {
+            if (!Passwords.domainMatch(r.domain, url))
+                return fn(r);
+            return true;
+        })
+    }
+
+    hasAppID (id: string): boolean {
+        for (let i = 0; i < this.internal.length; i++) {
+            if (this.internal[i].appID == id)
+                return true;
+        }
+        return false;
+    }
+    getAppID (id: string): password_t[] {
+
+    }
+    deleteAllAppID (id: string): void {
+
+    }
+    filterAppID (id: string, fn: (p: password_t) => boolean): void {
 
     }
 
