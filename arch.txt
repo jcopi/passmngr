@@ -1,0 +1,4 @@
+This document shall define the architecture of the password manager
+The basics of the manager are a cryptographically secure random password generator and file encryption and signing facilities.
+The passwords to individual apps or domains are maintained in an encrypted file.
+
