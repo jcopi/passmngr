@@ -1,3 +1,5 @@
+import { StringEncoding } from "./core";
+
 export interface password_t {
     domain: string;
     appID: string;
@@ -5,6 +7,21 @@ export interface password_t {
     identity: string;
     password: string;
     formData: object;
+}
+function isPassword (arg: any): arg is password_t {
+    if (!("domain" in arg ) || typeof arg.domain != "string")
+        return false;
+    if (!("appID" in arg ) || typeof arg.appID != "string")
+        return false;
+    if (!("tag" in arg ) || typeof arg.tag != "string")
+        return false;
+    if (!("identity" in arg ) || typeof arg.identity != "string")
+        return false;
+    if (!("password" in arg ) || typeof arg.password != "string")
+        return false;
+    if (!("formData" in arg ) || typeof arg.formData != "object")
+        return false;
+    return true;
 }
 
 export class Passwords {
@@ -25,7 +42,7 @@ export class Passwords {
     }
     filterURL (url: string, fn: (p: password_t) => boolean): void {
         this.internal = this.internal.filter(r => {
-            if (!Passwords.domainMatch(r.domain, url))
+            if (Passwords.domainMatch(r.domain, url))
                 return fn(r);
             return true;
         })
@@ -39,13 +56,33 @@ export class Passwords {
         return false;
     }
     getAppID (id: string): password_t[] {
-
+        return this.internal.filter(r => r.appID == id);
     }
     deleteAllAppID (id: string): void {
-
+        this.internal = this.internal.filter(r => r.appID != id);
     }
     filterAppID (id: string, fn: (p: password_t) => boolean): void {
+        this.internal = this.internal.filter(r => {
+            if (r.appID == id)
+                return fn(r);
+            return true;
+        })
+    }
 
+    toFile (): ArrayBuffer {
+        let str = JSON.stringify(this.internal);
+        return StringEncoding.toUTF8(str);
+    }
+    fromFile (buffer: ArrayBuffer): void {
+        let str = StringEncoding.fromUTF8(buffer);
+        let obj = JSON.parse(str);
+        if (!Array.isArray(obj))
+            throw "";
+        this.internal = [];
+        obj.forEach(v => {
+            if (isPassword(v))
+                this.internal.push(v);
+        });
     }
 
     static domainMatch (pattern: string, url: string): boolean {
