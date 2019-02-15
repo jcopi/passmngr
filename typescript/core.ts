@@ -58,12 +58,6 @@ export class BufferEncoding {
 
         return bytes.buffer;
     }
-    static toCustomBase (buffer: ArrayBuffer, dict: string): string {
-        let result = "";
-        let bits = Math.floor(Math.log2(dict.length) + 1);
-        
-        return result;
-    }
 }
 
 export class StringEncoding {
@@ -185,10 +179,15 @@ export class Crypto {
         return bytes.buffer;
     }
 
+    static BASE_64_PASSWORD_DICT: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    static BASE_98_PASSWORD_DICT: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
     static STANDARD_BIT_LENGTH: number = 256;
     static STANDARD_BLOCK_LENGTH: number = 16;
+    static STANDARD_GCM_NONCE_LENGTH: number = 16;
     static STANDARD_HASH_ALGO: string = "SHA-256";
     static STANDARD_HASH_LENGTH: number = 32;
+    static STANDARD_KDF_ITER_COUNT: number = 65537 * Math.pow(2, (new Date().getFullYear()) - 2012);
 
     master: CryptoKey = null;
     salt: ArrayBuffer = null;
@@ -197,7 +196,6 @@ export class Crypto {
 
     AESKey: CryptoKey = null;
     HMACKey: CryptoKey = null;
-
 
     constructor () {
         this.initialized = false;
@@ -217,9 +215,9 @@ export class Crypto {
         );
 
         this.AESKey = await crypto.subtle.deriveKey(
-            {"name":"PBKDF2", "iterations":997, "salt": this.salt, "hash":Crypto.STANDARD_HASH_ALGO},
+            {"name":"PBKDF2", "iterations":Crypto.STANDARD_KDF_ITER_COUNT, "salt": this.salt, "hash":Crypto.STANDARD_HASH_ALGO},
             this.master,
-            {"name":"AES-CBC", "length":Crypto.STANDARD_BIT_LENGTH},
+            {"name":"AES-GCM", "length":Crypto.STANDARD_BIT_LENGTH},
             false,
             ["encrypt", "decrypt"]
         );
@@ -239,9 +237,9 @@ export class Crypto {
         if (!this.initialized)
             throw "Crypto keys not initialized call initKeys first.";
 
-        let iv = Crypto.randomBytes(Crypto.STANDARD_BLOCK_LENGTH);
+        let iv = Crypto.randomBytes(Crypto.STANDARD_GCM_NONCE_LENGTH);
         let ct = await crypto.subtle.encrypt(
-            {"name":"AES-CBC", "iv":iv},
+            {"name":"AES-GCM", "iv":iv, "tagLength":128},
             this.AESKey,
             plain
         );
@@ -256,10 +254,10 @@ export class Crypto {
         if (!this.initialized)
             throw "Crypto keys not initialized call initKeys first.";
 
-        let iv = cipher.slice(0,Crypto.STANDARD_BLOCK_LENGTH);
-        let ct = cipher.slice(Crypto.STANDARD_BLOCK_LENGTH);
+        let iv = cipher.slice(0,Crypto.STANDARD_GCM_NONCE_LENGTH);
+        let ct = cipher.slice(Crypto.STANDARD_GCM_NONCE_LENGTH);
         let plain = await crypto.subtle.decrypt(
-            {"name":"AES-CBC", "iv":iv},
+            {"name":"AES-GCM", "iv":iv, "tagLength":128},
             this.AESKey,
             ct
         );
