@@ -74,8 +74,8 @@ module PassMNGR {
             
         }
 
-        AddLogin () {
-            
+        AddLogin (obj: Login) {
+
         }
     }
 
