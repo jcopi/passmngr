@@ -6,7 +6,6 @@
         "outDir"     : "./build"
     },
     "files": [
-        "./utils.ts",
-        "./records.ts"
+        "./utils.ts"
     ]
 }

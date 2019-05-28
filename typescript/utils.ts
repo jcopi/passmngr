@@ -174,82 +174,69 @@ export class StringEncoding {
 }
 
 export class Algos {
-    static IsPrime (x: number): boolean {
-        const small_primes = [2,3,5,7,11,13,17,19,23,29];
-        const indices = [1,7,11,13,17,19,23,29];
+    static smallPrimes: Uint32Array = new Uint32Array([2,3,5,7,11,13,17,19,23,29]);
+    static primeIndices: Uint32Array = new Uint32Array([1,7,11,13,17,19,23,29]);
+    static IsPrime (y: number): boolean {
+        let q = new Uint32Array(1);
+        let p = new Uint32Array(1);
+        let x = new Uint32Array(1);
+        x[0] = y;
 
-        const N = small_primes.length;
-        for (let i = 3; i < N; ++i)
-        {
-            const p = small_primes[i];
-            const q = x / p;
-            if (q < p)
-                return true;
-            if (x == q * p)
-                return false;
+        // Check all of the small primes
+        for (let i = 0; i < Algos.smallPrimes.length; ++i) {
+            p[0] = Algos.smallPrimes[i];
+            q[0] = x[0] / p[0];
+            if (q[0] < p[0]) return true;
+            if (x[0] == q[0] * p[0]) return false;
         }
-        for (let i = 31; true;)
-        {
-            let q = x / i;
-            if (q < i)
-                return true;
-            if (x == q * i)
-                return false;
-            i += 4;
+        
+        let i = new Uint32Array(1);
+        for (i[0] = 31; true;) {
+            q[0] = x[0] / i[0];
+            if (q[0] < i[0]) return true;
+            if (x[0] == q[0] * i[0]) return false;
+            i[0] += 6;
 
-            q = x / i;
-            i += 6;
+            q[0] = x[0] / i[0];
+            if (q[0] < i[0]) return true;
+            if (x[0] == q[0] * i[0]) return false;
+            i[0] += 4;
 
-            q = x / i;
-            if (q < i)
-                return true;
-            if (x == q * i)
-                return false;
-            if (q < i)
-                return true;
-            if (x == q * i)
-                return false;
-            i += 2;
+            q[0] = x[0] / i[0];
+            if (q[0] < i[0]) return true;
+            if (x[0] == q[0] * i[0]) return false;
+            i[0] += 2;
 
-            q = x / i;
-            if (q < i)
-                return true;
-            if (x == q * i)
-                return false;
-            i += 4;
+            q[0] = x[0] / i[0];
+            if (q[0] < i[0]) return true;
+            if (x[0] == q[0] * i[0]) return false;
+            i[0] += 4;
 
-            q = x / i;
-            if (q < i)
-                return true;
-            if (x == q * i)
-                return false;
-            i += 2;
+            q[0] = x[0] / i[0];
+            if (q[0] < i[0]) return true;
+            if (x[0] == q[0] * i[0]) return false;
+            i[0] += 2;
 
-            q = x / i;
-            if (q < i)
-                return true;
-            if (x == q * i)
-                return false;
-            i += 4;
+            q[0] = x[0] / i[0];
+            if (q[0] < i[0]) return true;
+            if (x[0] == q[0] * i[0]) return false;
+            i[0] += 4;
 
-            q = x / i;
-            if (q < i)
-                return true;
-            if (x == q * i)
-                return false;
-            i += 6;
+            q[0] = x[0] / i[0];
+            if (q[0] < i[0]) return true;
+            if (x[0] == q[0] * i[0]) return false;
+            i[0] += 6;
 
-            q = x / i;
-            if (q < i)
-                return true;
-            if (x == q * i)
-                return false;
-            i += 2;
+            q[0] = x[0] / i[0];
+            if (q[0] < i[0]) return true;
+            if (x[0] == q[0] * i[0]) return false;
+            i[0] += 2;
         }
+
         return true;
     }
 
-    static LowerBound (list: Array<any>, value: any): number {
+    static LowerBound (list: ArrayLike<any>, value: any): number {
         let l = 0;
         let h = list.length;
         while (l < h) {
@@ -264,23 +251,23 @@ export class Algos {
     }
 
     static NextPrime (n: number): number {
-        const small_primes = [2,3,5,7,11,13,17,19,23,29];
-        const indices = [1,7,11,13,17,19,23,29];
+        const small_primes = Algos.smallPrimes;
+        const indices = Algos.primeIndices;
 
         const L = 30;
-        const N = small_primes.length;
+        const N = Algos.smallPrimes.length;
         // If n is small enough, search in small_primes
-        if (n <= small_primes[N-1]) {
-            return small_primes[Algos.LowerBound(small_primes, n)];
+        if (n <= Algos.smallPrimes[N-1]) {
+            return Algos.smallPrimes[Algos.LowerBound(Algos.smallPrimes, n)];
         }
         // Else n > largest small_primes
         // Start searching list of potential primes: L * k0 + indices[in]
-        const M = indices.length;
+        const M = Algos.primeIndices.length;
         // Select first potential prime >= n
         //   Known a-priori n >= L
-        let k0 = n / L;
-        let inn = Algos.LowerBound(indices, n - k0 * L);
-        n = L * k0 + indices[inn];
+        let k0 = (n / L) | 0; // Coerce to Uint32
+        let inn = Algos.LowerBound(Algos.primeIndices, n - k0 * L);
+        n = L * k0 + Algos.primeIndices[inn];
         while (!Algos.IsPrime(n))
         {
             if (++inn == M)
@@ -288,7 +275,7 @@ export class Algos {
                 ++k0;
                 inn = 0;
             }
-            n = L * k0 + indices[inn];
+            n = L * k0 + Algos.primeIndices[inn];
         }
         return n;
     }
@@ -324,9 +311,9 @@ export class Crypto {
     static async DerivedKeyToSymmetricKeyPair (shared: ArrayBuffer, salt: ArrayBuffer, info: ArrayBuffer): Promise<[CryptoKey, CryptoKey]> {
         let raw = await window.crypto.subtle.importKey("raw", shared, "HKDF", true, ["deriveKey", "deriveBits"]);
     
-        let aes = await window.crypto.subtle.deriveKey({name:"HKDF", hash:Crypto.standardHash, salt:salt, info:info},
+        let aes = await window.crypto.subtle.deriveKey(({name:"HKDF", hash:Crypto.standardHash, salt:salt, info:info} as any),
             raw, {name:"AES-GCM", length:Crypto.standardBitLength}, false, ["encrypt", "decrypt"]);
-        let hmac = await window.crypto.subtle.deriveKey({name:"HKDF", hash:Crypto.standardHash, salt:salt, info:info},
+        let hmac = await window.crypto.subtle.deriveKey(({name:"HKDF", hash:Crypto.standardHash, salt:salt, info:info} as any),
             raw, {name:"HMAC",hash:Crypto.standardHash,length:Crypto.standardBitLength}, false, ["sign", "verify"]);
         
         return [aes, hmac];
