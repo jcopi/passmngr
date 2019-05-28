@@ -173,128 +173,210 @@ export class StringEncoding {
     }
 }
 
+export class Algos {
+    static IsPrime (x: number): boolean {
+        const small_primes = [2,3,5,7,11,13,17,19,23,29];
+        const indices = [1,7,11,13,17,19,23,29];
+
+        const N = small_primes.length;
+        for (let i = 3; i < N; ++i)
+        {
+            const p = small_primes[i];
+            const q = x / p;
+            if (q < p)
+                return true;
+            if (x == q * p)
+                return false;
+        }
+        for (let i = 31; true;)
+        {
+            let q = x / i;
+            if (q < i)
+                return true;
+            if (x == q * i)
+                return false;
+            i += 4;
+
+            q = x / i;
+            i += 6;
+
+            q = x / i;
+            if (q < i)
+                return true;
+            if (x == q * i)
+                return false;
+            if (q < i)
+                return true;
+            if (x == q * i)
+                return false;
+            i += 2;
+
+            q = x / i;
+            if (q < i)
+                return true;
+            if (x == q * i)
+                return false;
+            i += 4;
+
+            q = x / i;
+            if (q < i)
+                return true;
+            if (x == q * i)
+                return false;
+            i += 2;
+
+            q = x / i;
+            if (q < i)
+                return true;
+            if (x == q * i)
+                return false;
+            i += 4;
+
+            q = x / i;
+            if (q < i)
+                return true;
+            if (x == q * i)
+                return false;
+            i += 6;
+
+            q = x / i;
+            if (q < i)
+                return true;
+            if (x == q * i)
+                return false;
+            i += 2;
+        }
+        return true;
+    }
+
+    static LowerBound (list: Array<any>, value: any): number {
+        let l = 0;
+        let h = list.length;
+        while (l < h) {
+            let mid = ((l + h) | 0) >> 1;
+            if (value <= list[mid]) {
+                h = mid;
+            } else {
+                l = mid + 1;
+            }
+        }
+        return l;
+    }
+
+    static NextPrime (n: number): number {
+        const small_primes = [2,3,5,7,11,13,17,19,23,29];
+        const indices = [1,7,11,13,17,19,23,29];
+
+        const L = 30;
+        const N = small_primes.length;
+        // If n is small enough, search in small_primes
+        if (n <= small_primes[N-1]) {
+            return small_primes[Algos.LowerBound(small_primes, n)];
+        }
+        // Else n > largest small_primes
+        // Start searching list of potential primes: L * k0 + indices[in]
+        const M = indices.length;
+        // Select first potential prime >= n
+        //   Known a-priori n >= L
+        let k0 = n / L;
+        let inn = Algos.LowerBound(indices, n - k0 * L);
+        n = L * k0 + indices[inn];
+        while (!Algos.IsPrime(n))
+        {
+            if (++inn == M)
+            {
+                ++k0;
+                inn = 0;
+            }
+            n = L * k0 + indices[inn];
+        }
+        return n;
+    }
+}
+
 export class Crypto {
-    static randomBytes (count:number): ArrayBuffer {
-        let bytes = crypto.getRandomValues(new Uint8Array(count));
-        return bytes.buffer;
+    static kdfIterations: number = Algos.NextPrime(4194368);
+    static standardHash: string = "SHA-256";
+    static standardBitLength: number = 256;
+    static gcmNonceLength: number = 16;
+    static signatureLength: number = 32;
+
+    static RandomBytes (byteCount: number): ArrayBuffer {
+        let buffer = new Uint8Array(byteCount);
+        window.crypto.getRandomValues(buffer);
+        return buffer.buffer;
     }
 
-    static BASE_64_PASSWORD_DICT: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    static BASE_98_PASSWORD_DICT: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-
-    static STANDARD_BIT_LENGTH: number = 256;
-    static STANDARD_BLOCK_LENGTH: number = 16;
-    static STANDARD_GCM_NONCE_LENGTH: number = 16;
-    static STANDARD_HASH_ALGO: string = "SHA-256";
-    static STANDARD_HASH_LENGTH: number = 32;
-    static STANDARD_KDF_ITER_COUNT: number = 65537 * Math.pow(2, (new Date().getFullYear()) - 2012);
-
-    master: CryptoKey = null;
-    salt: ArrayBuffer = null;
-
-    initialized: boolean = false;
-
-    AESKey: CryptoKey = null;
-    HMACKey: CryptoKey = null;
-
-    constructor () {
-        this.initialized = false;
+    static async StringToRawKey (str: string): Promise<CryptoKey> {
+        let key = await window.crypto.subtle.importKey("raw", StringEncoding.toUTF8(str), "PBKDF2", false, ["deriveKey", "deriveBits"]);
+        return key;
     }
 
-    async initKeys (raw: string, salt?: ArrayBuffer): Promise<void> {
-        if (salt === undefined)
-            salt = Crypto.randomBytes(Crypto.STANDARD_BLOCK_LENGTH);
-        this.salt = salt;
+    static async RawKeyToSymmetricKeyPair (raw: CryptoKey, salt: ArrayBuffer): Promise<[CryptoKey,CryptoKey]> {
+        let aes = await window.crypto.subtle.deriveKey({name:"PBKDF2", iterations:Crypto.kdfIterations, salt:salt, hash:Crypto.standardHash},
+            raw, {name:"AES-GCM", length:Crypto.standardBitLength}, false, ["encrypt", "decrypt"]);
+        let hmac = await window.crypto.subtle.deriveKey({name:"PBKDF2", iterations:Algos.NextPrime(Crypto.kdfIterations - 2048), salt:salt, hash:Crypto.standardHash},
+            raw, {name:"HMAC", hash:Crypto.standardHash}, false, ["sign", "verify"]);
 
-        this.master = await crypto.subtle.importKey(
-            "raw",
-            StringEncoding.toUTF8(raw),
-            "PBKDF2",
-            false,
-            ["deriveKey", "deriveBits"]
-        );
-
-        this.AESKey = await crypto.subtle.deriveKey(
-            {"name":"PBKDF2", "iterations":Crypto.STANDARD_KDF_ITER_COUNT, "salt": this.salt, "hash":Crypto.STANDARD_HASH_ALGO},
-            this.master,
-            {"name":"AES-GCM", "length":Crypto.STANDARD_BIT_LENGTH},
-            false,
-            ["encrypt", "decrypt"]
-        );
-
-        this.HMACKey = await crypto.subtle.deriveKey(
-            {"name":"PBKDF2", "iterations":991, "salt":this.salt, "hash":Crypto.STANDARD_HASH_ALGO},
-            this.master,
-            {"name":"HMAC", "hash":Crypto.STANDARD_HASH_ALGO},
-            false,
-            ["sign", "verify"]
-        );
-
-        this.initialized = true;
+        return [aes, hmac];
     }
 
-    async encrypt (plain: ArrayBuffer): Promise<ArrayBuffer> {
-        if (!this.initialized)
-            throw "Crypto keys not initialized call initKeys first.";
-
-        let iv = Crypto.randomBytes(Crypto.STANDARD_GCM_NONCE_LENGTH);
-        let ct = await crypto.subtle.encrypt(
-            {"name":"AES-GCM", "iv":iv, "tagLength":128},
-            this.AESKey,
-            plain
-        );
-
-        let result = new Uint8Array(iv.byteLength + ct.byteLength);
-        result.set(new Uint8Array(iv), 0);
-        result.set(new Uint8Array(ct), iv.byteLength);
-
-        return result.buffer;
+    static async DerivedKeyToSymmetricKeyPair (shared: ArrayBuffer, salt: ArrayBuffer, info: ArrayBuffer): Promise<[CryptoKey, CryptoKey]> {
+        let raw = await window.crypto.subtle.importKey("raw", shared, "HKDF", true, ["deriveKey", "deriveBits"]);
+    
+        let aes = await window.crypto.subtle.deriveKey({name:"HKDF", hash:Crypto.standardHash, salt:salt, info:info},
+            raw, {name:"AES-GCM", length:Crypto.standardBitLength}, false, ["encrypt", "decrypt"]);
+        let hmac = await window.crypto.subtle.deriveKey({name:"HKDF", hash:Crypto.standardHash, salt:salt, info:info},
+            raw, {name:"HMAC",hash:Crypto.standardHash,length:Crypto.standardBitLength}, false, ["sign", "verify"]);
+        
+        return [aes, hmac];
     }
-    async decrypt (cipher: ArrayBuffer): Promise<ArrayBuffer> {
-        if (!this.initialized)
-            throw "Crypto keys not initialized call initKeys first.";
 
-        let iv = cipher.slice(0,Crypto.STANDARD_GCM_NONCE_LENGTH);
-        let ct = cipher.slice(Crypto.STANDARD_GCM_NONCE_LENGTH);
-        let plain = await crypto.subtle.decrypt(
-            {"name":"AES-GCM", "iv":iv, "tagLength":128},
-            this.AESKey,
-            ct
-        );
+    static async SymmetricEncrypt (keypair: [CryptoKey, CryptoKey], plaintext: ArrayBuffer): Promise<ArrayBuffer> {
+        let aes = keypair[0];
+        let hmac = keypair[1];
+        try {
+            let nonce = Crypto.RandomBytes(Crypto.gcmNonceLength);
+            let cipher = await window.crypto.subtle.encrypt({name:"AES-GCM", iv:nonce, tagLength: Crypto.gcmNonceLength * 8},
+                aes, plaintext);
 
-        return plain;
+            let temp = new Uint8Array(nonce.byteLength + cipher.byteLength);
+            temp.set(new Uint8Array(nonce)); temp.set(new Uint8Array(cipher), nonce.byteLength);
+
+            
+            let signature = await window.crypto.subtle.sign("HMAC", hmac, temp.buffer);
+
+            let result = new Uint8Array(signature.byteLength + temp.byteLength);
+            result.set(new Uint8Array(signature)); result.set(temp, signature.byteLength);
+
+            return result;
+        } catch (ex) {
+            throw "Encryption Error";
+        }
     }
-    async sign (message: ArrayBuffer): Promise<ArrayBuffer> {
-        if (!this.initialized)
-            throw "Crypto keys not initialized call initKeys first.";
 
-        let result = new Uint8Array(message.byteLength + Crypto.STANDARD_HASH_LENGTH);
-        result.set(new Uint8Array(message), Crypto.STANDARD_HASH_LENGTH);
-        let signature = await crypto.subtle.sign(
-            "HMAC",
-            this.HMACKey,
-            message
-        );
+    static async SymmetricDecrypt (keypair: [CryptoKey, CryptoKey], ciphertext: ArrayBuffer): Promise<ArrayBuffer> {
+        let aes = keypair[0];
+        let hmac = keypair[1];
 
-        result.set(new Uint8Array(signature), 0);
-        return result.buffer;
-    }
-    async verify (signed: ArrayBuffer): Promise<[boolean, ArrayBuffer]> {
-        if (!this.initialized)
-            throw "Crypto keys not initialized call initKeys first.";
+        let signature = ciphertext.slice(0, Crypto.signatureLength);
+        let message = ciphertext.slice(Crypto.signatureLength);
+        try {
+            let valid = await window.crypto.subtle.verify("HMAC", hmac, signature, message);
+            if (!valid) {
+                throw "Decryption Error";
+            }
 
-        let signature = signed.slice(0, Crypto.STANDARD_HASH_LENGTH);
-        let message = signed.slice(Crypto.STANDARD_HASH_LENGTH);
-        let valid = await crypto.subtle.verify(
-            "HMAC",
-            this.HMACKey,
-            signature,
-            message
-        );
-        if (valid)
-            return [true, message];
+            let nonce = message.slice(0, Crypto.gcmNonceLength);
+            let cipher = message.slice(Crypto.gcmNonceLength);
 
-        return [false, null];
+            let plain = await window.crypto.subtle.decrypt({name:"AES-GCM", iv:nonce, tagLength:Crypto.gcmNonceLength * 8},
+                aes, cipher);
+
+            return plain;
+        } catch (ex) {
+            throw "Decryption Error";
+        }
     }
 }
 
