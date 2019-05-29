@@ -372,5 +372,7 @@ export class Crypto {
 
         return [publicKey, keypair.privateKey];
     }
+
+    static async 
 }
 
