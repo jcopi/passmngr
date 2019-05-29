@@ -177,60 +177,57 @@ export class Algos {
     static smallPrimes: Uint32Array = new Uint32Array([2,3,5,7,11,13,17,19,23,29]);
     static primeIndices: Uint32Array = new Uint32Array([1,7,11,13,17,19,23,29]);
     static IsPrime (y: number): boolean {
-        let q = new Uint32Array(1);
-        let p = new Uint32Array(1);
-        let x = new Uint32Array(1);
-        x[0] = y;
+        let u32 = new Uint32Array(4);
+        u32[2] = y;
 
         // Check all of the small primes
         for (let i = 0; i < Algos.smallPrimes.length; ++i) {
-            p[0] = Algos.smallPrimes[i];
-            q[0] = x[0] / p[0];
-            if (q[0] < p[0]) return true;
-            if (x[0] == q[0] * p[0]) return false;
+            u32[1] = Algos.smallPrimes[i];
+            u32[0] = u32[2] / u32[1];
+            if (u32[0] < u32[1]) return true;
+            if (u32[2] == u32[0] * u32[1]) return false;
         }
         
-        let i = new Uint32Array(1);
-        for (i[0] = 31; true;) {
-            q[0] = x[0] / i[0];
-            if (q[0] < i[0]) return true;
-            if (x[0] == q[0] * i[0]) return false;
-            i[0] += 6;
+        for (u32[3] = 31; true;) {
+            u32[0] = u32[2] / u32[3];
+            if (u32[0] < u32[3]) return true;
+            if (u32[2] == u32[0] * u32[3]) return false;
+            u32[3] += 6;
 
-            q[0] = x[0] / i[0];
-            if (q[0] < i[0]) return true;
-            if (x[0] == q[0] * i[0]) return false;
-            i[0] += 4;
+            u32[0] = u32[2] / u32[3];
+            if (u32[0] < u32[3]) return true;
+            if (u32[2] == u32[0] * u32[3]) return false;
+            u32[3] += 4;
 
-            q[0] = x[0] / i[0];
-            if (q[0] < i[0]) return true;
-            if (x[0] == q[0] * i[0]) return false;
-            i[0] += 2;
+            u32[0] = u32[2] / u32[3];
+            if (u32[0] < u32[3]) return true;
+            if (u32[2] == u32[0] * u32[3]) return false;
+            u32[3] += 2;
 
-            q[0] = x[0] / i[0];
-            if (q[0] < i[0]) return true;
-            if (x[0] == q[0] * i[0]) return false;
-            i[0] += 4;
+            u32[0] = u32[2] / u32[3];
+            if (u32[0] < u32[3]) return true;
+            if (u32[2] == u32[0] * u32[3]) return false;
+            u32[3] += 4;
 
-            q[0] = x[0] / i[0];
-            if (q[0] < i[0]) return true;
-            if (x[0] == q[0] * i[0]) return false;
-            i[0] += 2;
+            u32[0] = u32[2] / u32[3];
+            if (u32[0] < u32[3]) return true;
+            if (u32[2] == u32[0] * u32[3]) return false;
+            u32[3] += 2;
 
-            q[0] = x[0] / i[0];
-            if (q[0] < i[0]) return true;
-            if (x[0] == q[0] * i[0]) return false;
-            i[0] += 4;
+            u32[0] = u32[2] / u32[3];
+            if (u32[0] < u32[3]) return true;
+            if (u32[2] == u32[0] * u32[3]) return false;
+            u32[3] += 4;
 
-            q[0] = x[0] / i[0];
-            if (q[0] < i[0]) return true;
-            if (x[0] == q[0] * i[0]) return false;
-            i[0] += 6;
+            u32[0] = u32[2] / u32[3];
+            if (u32[0] < u32[3]) return true;
+            if (u32[2] == u32[0] * u32[3]) return false;
+            u32[3] += 6;
 
-            q[0] = x[0] / i[0];
-            if (q[0] < i[0]) return true;
-            if (x[0] == q[0] * i[0]) return false;
-            i[0] += 2;
+            u32[0] = u32[2] / u32[3];
+            if (u32[0] < u32[3]) return true;
+            if (u32[2] == u32[0] * u32[3]) return false;
+            u32[3] += 2;
         }
 
         return true;
@@ -373,6 +370,22 @@ export class Crypto {
         return [publicKey, keypair.privateKey];
     }
 
-    static async 
+    static async PublicBytesToRawKey (bytes: ArrayBuffer): Promise<CryptoKey> {
+        let key =  await window.crypto.subtle.importKey("raw", bytes, {name:"ECDH", namedCurve:"P-521"}, true, []);
+        return key;
+    }
+    
+    static async DeriveSharedSecret (otherPublic: CryptoKey, privateKey: CryptoKey): Promise<ArrayBuffer> {
+        let shared = await window.crypto.subtle.deriveBits(({name:"ECDH", namedCurve:"P-521", public:otherPublic} as any), privateKey, 528);
+        if ((new Uint8Array(shared))[0] == 0) {
+            shared = shared.slice(1);
+        }
+    
+        return shared;
+    }
 }
 
+export class Channel {
+
+    constructor () {}
+}
