@@ -365,5 +365,12 @@ export class Crypto {
             throw "Decryption Error";
         }
     }
+
+    static async GenerateAsymmetricKeyPair (): Promise<[ArrayBuffer, CryptoKey]> {
+        let keypair = await window.crypto.subtle.generateKey({name:"ECDH", namedCurve:"P-521"}, true, ["deriveKey", "deriveBits"]);
+        let publicKey = await window.crypto.subtle.exportKey("raw", keypair.publicKey);
+
+        return [publicKey, keypair.privateKey];
+    }
 }
 
