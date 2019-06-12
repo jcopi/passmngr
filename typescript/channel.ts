@@ -15,6 +15,8 @@ export class Channel {
         context: null
     };
 
+    static AsymmetricSaltLength: number = (512 >> 3);
+    
     // This channel implementation uses async and await to provide a synchronous API
     // To provide this the class will maintain the promise, resolver, and rejecter of the most recent operation
     promise: Promise<unknown> = null;
@@ -204,7 +206,7 @@ export class Channel {
 
     async getNewAsymmetricKeys (): Promise<void> {
         [this.crypto.asymmetric.public, this.crypto.asymmetric.private] = await Utils.Crypto.GenerateAsymmetricKeyPair();
-        this.crypto.asymmetric.salt = Utils.Crypto.RandomBytes(Utils.Crypto.gcmNonceLength);
+        this.crypto.asymmetric.salt = Utils.Crypto.RandomBytes(Channel.AsymmetricSaltLength);
     }
 
     packPublicKeyData (data: ArrayBuffer): ArrayBuffer {
@@ -235,10 +237,19 @@ export class Channel {
         return [pubKey.buffer, salt.buffer, data.buffer];
     }
     async updateRatchet (serverPublic: ArrayBuffer, serverSalt: ArrayBuffer): Promise<void> {
-        // Combine the client and server salts        
-        let salt = new Uint8Array(this.crypto.asymmetric.salt.byteLength + serverSalt.byteLength);
-        salt.set(new Uint8Array(this.crypto.asymmetric.salt));
-        salt.set(new Uint8Array(serverSalt), this.crypto.asymmetric.salt.byteLength);
+        // Combine the client and server salts
+        let clientStart = new Uint8Array(this.crypto.asymmetric.salt).slice(0, this.crypto.asymmetric.salt.byteLength >> 1);
+        let clientEnd = new Uint8Array(this.crypto.asymmetric.salt).slice(this.crypto.asymmetric.salt.byteLength >> 1);
+        let serverStart = new Uint8Array(serverSalt).slice(0, serverSalt.byteLength >> 1);
+        let serverEnd = new Uint8Array(serverSalt).slice(serverSalt.byteLength >> 1);
+        // The aes salt is the first half of client and second half of server
+        let aessalt = new Uint8Array(clientStart.length + serverEnd.length);
+        aessalt.set(clientStart);
+        aessalt.set(serverEnd, clientStart.length);
+        // The hmac salt is the second half of client and first half of server
+        let hmacsalt = new Uint8Array(clientEnd.length + serverStart.length);
+        hmacsalt.set(clientEnd);
+        hmacsalt.set(serverStart, clientEnd.length);        
 
         // Import the server public key bytes
         let serverKey = await Utils.Crypto.PublicBytesToRawKey(serverPublic);
@@ -247,7 +258,7 @@ export class Channel {
         // Derive a key using hkdf
         // If context isn't set ignore it
         let info = this.crypto.context === null ? new ArrayBuffer(0) : this.crypto.context;
-        [this.crypto.symmetric.aes, this.crypto.symmetric.hmac] = await Utils.Crypto.DerivedKeyToSymmetricKeyPair(sharedBytes, salt, info);
+        [this.crypto.symmetric.aes, this.crypto.symmetric.hmac] = await Utils.Crypto.DerivedKeyToSymmetricKeyPair(sharedBytes, aessalt, hmacsalt, info);
     }
 
     Fatal (reason: string): void {

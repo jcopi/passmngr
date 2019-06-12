@@ -8,7 +8,7 @@ export class BufferEncoding {
         let mainlen = buffer.byteLength - remainder;
 
         for (let i = 0; i < mainlen; i += 3) {
-            let word = (bytes[i] << 8) | (bytes[i+1] << 8) | bytes[i+2];
+            let word = (bytes[i] << 16) | (bytes[i+1] << 8) | bytes[i+2];
             result += encoding[(word & 0b111111000000000000000000) >> 18];
             result += encoding[(word & 0b000000111111000000000000) >> 12];
             result += encoding[(word & 0b000000000000111111000000) >>  6];
@@ -283,11 +283,16 @@ type SymmetricKeyPair = [CryptoKey, CryptoKey];
 type AsymmetricKeyPair = [ArrayBuffer, CryptoKey];
 
 export class Crypto {
-    static kdfIterations: number = Algos.NextPrime(4194368);
-    static standardHash: string = "SHA-256";
-    static standardBitLength: number = 256;
-    static gcmNonceLength: number = 16;
-    static signatureLength: number = 32;
+    static kdfIterations     : number = Algos.NextPrime(4194368);
+    static kdfInitialHash    : string = "SHA-512";
+    static standardHash      : string = "SHA-256";
+    static standardBitLength : number = 256;
+    static gcmNonceLength    : number = 16;
+    static gcmTagLength      : number = 128;
+    static signatureLength   : number = 32;
+
+    static cbcIVLength       : number = 16; //128b / 8b/B
+    static standardHashLength: number = 32; // 256b / 8b/B
 
     static RandomBytes (byteCount: number): ArrayBuffer {
         let buffer = new Uint8Array(byteCount);
@@ -296,25 +301,72 @@ export class Crypto {
     }
 
     static async StringToRawKey (str: string): Promise<CryptoKey> {
-        let key = await window.crypto.subtle.importKey("raw", StringEncoding.toUTF8(str), "PBKDF2", false, ["deriveKey", "deriveBits"]);
+        let key = await window.crypto.subtle.importKey(
+            "raw",
+            StringEncoding.toUTF8(str),
+            "PBKDF2",
+            false,
+            ["deriveKey", "deriveBits"]
+        );
         return key;
     }
 
-    static async RawKeyToSymmetricKeyPair (raw: CryptoKey, salt: ArrayBuffer): Promise<SymmetricKeyPair> {
-        let aes = await window.crypto.subtle.deriveKey({name:"PBKDF2", iterations:Crypto.kdfIterations, salt:salt, hash:Crypto.standardHash},
-            raw, {name:"AES-GCM", length:Crypto.standardBitLength}, false, ["encrypt", "decrypt"]);
-        let hmac = await window.crypto.subtle.deriveKey({name:"PBKDF2", iterations:Algos.NextPrime(Crypto.kdfIterations - 2048), salt:salt, hash:Crypto.standardHash},
-            raw, {name:"HMAC", hash:Crypto.standardHash}, false, ["sign", "verify"]);
+    static async BytesToRawKey (bytes: ArrayBuffer): Promise<CryptoKey> {
+        let key = await window.crypto.subtle.importKey(
+            "raw",
+            bytes,
+            "HKDF",
+            false,
+            ["deriveKey", "deriveBits"]
+        );
+        return key;
+    }
+
+    static async RawKeyToSymmetricKeyPair (raw: CryptoKey, aessalt: ArrayBuffer, hmacsalt: ArrayBuffer): Promise<SymmetricKeyPair> {
+        let asalt = new Uint8Array(aessalt);
+        let hsalt = new Uint8Array(hmacsalt);
+        let csalt = new Uint8Array(asalt.length + hsalt.length);
+        csalt.set(asalt);
+        csalt.set(hsalt, asalt.length);
+
+        let bits = await window.crypto.subtle.deriveBits(
+            {name:"PBKDF2", iterations:Crypto.kdfIterations, salt:csalt.buffer, hash:Crypto.kdfInitialHash},
+            raw,
+            512
+        );
+
+        let barray = new Uint8Array(bits);
+        let aesbits = barray.slice(0, 32);
+        let hmacbits = barray.slice(32);
+
+        let aesraw = await Crypto.BytesToRawKey(aesbits);
+        let hmacraw = await Crypto.BytesToRawKey(hmacbits);
+        
+        let aes = await window.crypto.subtle.deriveKey(
+            {name:"HKDF", info:new ArrayBuffer(0), salt:aessalt, hash:Crypto.standardHash} as any, // Typescript typing issues
+            aesraw, 
+            {name:"AES-GCM", length:Crypto.standardBitLength}, 
+            false, 
+            ["encrypt", "decrypt"]
+        );
+
+        let hmac = await window.crypto.subtle.deriveKey(
+            {name:"HKDF", info:new ArrayBuffer(0), salt:hmacsalt, hash:Crypto.standardHash} as any,
+            hmacraw, 
+            {name:"HMAC", hash:Crypto.standardHash},
+            false,
+            ["sign", "verify"]
+        );
 
         return [aes, hmac];
     }
 
-    static async DerivedKeyToSymmetricKeyPair (shared: ArrayBuffer, salt: ArrayBuffer, info: ArrayBuffer): Promise<SymmetricKeyPair> {
+    static async DerivedKeyToSymmetricKeyPair (shared: ArrayBuffer, aessalt: ArrayBuffer, hmacsalt: ArrayBuffer, info: ArrayBuffer): Promise<SymmetricKeyPair> {
         let raw = await window.crypto.subtle.importKey("raw", shared, "HKDF", true, ["deriveKey", "deriveBits"]);
     
-        let aes = await window.crypto.subtle.deriveKey(({name:"HKDF", hash:Crypto.standardHash, salt:salt, info:info} as any),
+        let aes = await window.crypto.subtle.deriveKey(({name:"HKDF", hash:Crypto.standardHash, salt:aessalt, info:info} as any),
             raw, {name:"AES-GCM", length:Crypto.standardBitLength}, false, ["encrypt", "decrypt"]);
-        let hmac = await window.crypto.subtle.deriveKey(({name:"HKDF", hash:Crypto.standardHash, salt:salt, info:info} as any),
+        let hmac = await window.crypto.subtle.deriveKey(({name:"HKDF", hash:Crypto.standardHash, salt:hmacsalt, info:info} as any),
             raw, {name:"HMAC",hash:Crypto.standardHash,length:Crypto.standardBitLength}, false, ["sign", "verify"]);
         
         return [aes, hmac];
@@ -324,19 +376,26 @@ export class Crypto {
         let aes = keypair[0];
         let hmac = keypair[1];
         try {
-            let nonce = Crypto.RandomBytes(Crypto.gcmNonceLength);
-            let cipher = await window.crypto.subtle.encrypt({name:"AES-GCM", iv:nonce, tagLength: Crypto.gcmNonceLength * 8},
-                aes, plaintext);
-            
-            let signature = await window.crypto.subtle.sign("HMAC", hmac, cipher);
+            let iv = Crypto.RandomBytes(Crypto.gcmNonceLength);
+            let cipher = await window.crypto.subtle.encrypt(
+                {name:"AES-GCM", iv:iv, tagLength:Crypto.gcmTagLength},
+                aes, 
+                plaintext
+            );
 
-            let result = new Uint8Array(1 + signature.byteLength + 1 + nonce.byteLength + cipher.byteLength);
+            let tmp = new Uint8Array(iv.byteLength + cipher.byteLength);
+            tmp.set(new Uint8Array(iv));
+            tmp.set(new Uint8Array(cipher), iv.byteLength);
+            
+            let signature = await window.crypto.subtle.sign("HMAC", hmac, tmp);
+
+            let result = new Uint8Array(1 + signature.byteLength + 1 + iv.byteLength + cipher.byteLength);
             let i = 0;
 
             result[i] = signature.byteLength;         i++;
             result.set(new Uint8Array(signature), i); i += signature.byteLength;
-            result[i] = nonce.byteLength;             i++;
-            result.set(new Uint8Array(nonce), i);     i += nonce.byteLength;
+            result[i] = iv.byteLength;                i++;
+            result.set(new Uint8Array(iv), i);        i += iv.byteLength;
             result.set(new Uint8Array(cipher), i);    i += cipher.byteLength;
 
             return result;
@@ -355,16 +414,19 @@ export class Crypto {
         let sigLength = ct[i];                      i++;
         let signature = ct.slice(i, i + sigLength); i += sigLength;
         let ivLength  = ct[i];                      i++;
-        let nonce     = ct.slice(i, i + ivLength);  i += ivLength;
-        let message   = ct.slice(i);                
+        let iv        = ct.slice(i, i + ivLength);  i += ivLength;
+        let message   = ct.slice(i);
+        
+        let tmp = new Uint8Array(iv.length + message.length);
+        tmp.set(iv); tmp.set(message, iv.length);
 
         try {
-            let valid = await window.crypto.subtle.verify("HMAC", hmac, signature, message);
+            let valid = await window.crypto.subtle.verify("HMAC", hmac, signature, tmp);
             if (!valid) {
                 throw "Decryption Error";
             }
 
-            let plain = await window.crypto.subtle.decrypt({name:"AES-GCM", iv:nonce, tagLength:Crypto.gcmNonceLength * 8},
+            let plain = await window.crypto.subtle.decrypt({name:"AES-GCM", iv:iv, tagLength:Crypto.gcmTagLength},
                 aes, message);
 
             return plain;

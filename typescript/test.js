@@ -1,15 +1,16 @@
 import * as Utils from "./build/utils.js"
 
 async function DoPBKDF2 (string) {
-	let password  = string;
-	let passsalt  = Utils.Crypto.RandomBytes(256 / 8);
-	let rawkey = await Utils.Crypto.StringToRawKey(password);
-	let keypair = await Utils.Crypto.RawKeyToSymmetricKeyPair(rawkey, passsalt);
+	let password = string;
+	let aessalt  = Utils.Crypto.RandomBytes(256 / 8);
+	let hmacsalt = Utils.Crypto.RandomBytes(256 / 8);
+	let rawkey   = await Utils.Crypto.StringToRawKey(password);
+	let keypair  = await Utils.Crypto.RawKeyToSymmetricKeyPair(rawkey, aessalt, hmacsalt);
 	keypair !== null && false;
 }
 
 async function init() {
-	/*console.log("PERFORMANCE TESTING PBKDF2");
+	console.log("PERFORMANCE TESTING PBKDF2");
 	let list = ["password", "abcdefghijklmnop", "12345678", "a bad password", "batterystaplehorsecorrect", "!@testT3sTtESt123"]
 	let times = [];
 	for (let i = 0; i < list.length; ++i) {
@@ -17,7 +18,7 @@ async function init() {
 		let x = await DoPBKDF2(list[i]);
 		times.push(Date.now() - start);
 	}
-	console.log(times.map((v,i) => {return [list[i].length, v]}));*/
+	console.log(times.map((v,i) => {return [list[i].length, v]}));
 
 	console.log("TESTING SYMMETRIC ENCRYPTION")
 
@@ -25,17 +26,18 @@ async function init() {
 	console.log("Plaintext:", plaintext);
 	let ptbuffer = Utils.StringEncoding.toUTF8(plaintext);
 
-	let password  = "password";
-	let passsalt  = Utils.Crypto.RandomBytes(256 / 8);
-	let rawkey = await Utils.Crypto.StringToRawKey(password);
-	let keypair = await Utils.Crypto.RawKeyToSymmetricKeyPair(rawkey, passsalt);
+	let password = "password";
+	let aessalt  = Utils.Crypto.RandomBytes(256 / 8);
+	let hmacsalt = Utils.Crypto.RandomBytes(256 / 8);
+	let rawkey   = await Utils.Crypto.StringToRawKey(password);
+	let keypair  = await Utils.Crypto.RawKeyToSymmetricKeyPair(rawkey, aessalt, hmacsalt);
 	let ctbuffer = await Utils.Crypto.SymmetricEncrypt(keypair, ptbuffer);
 	console.log("Ciphertext: ", Utils.StringEncoding.fromUTF8(ctbuffer));
 
 	let dptbuffer = await Utils.Crypto.SymmetricDecrypt(keypair, ctbuffer);
 	console.log("Plaintext:", Utils.StringEncoding.fromUTF8(dptbuffer));
 
-	console.log("TESTING ASYMMETRIC ENCRYPTION");
+	/*console.log("TESTING ASYMMETRIC ENCRYPTION");
 	let [apublic, aprivate] = await Utils.Crypto.GenerateAsymmetricKeyPair();
 	let [bpublic, bprivate] = await Utils.Crypto.GenerateAsymmetricKeyPair();
 	let asalt = Utils.Crypto.RandomBytes(Utils.Crypto.gcmNonceLength);
@@ -85,6 +87,7 @@ async function init() {
 	console.log("Ciphertext: ", Utils.StringEncoding.fromUTF8(bactbuf));
 	abplain = await Utils.Crypto.SymmetricDecrypt(asymkeys, bactbuf);
 	console.log("Plaintext: ", Utils.StringEncoding.fromUTF8(abplain));
+	*/
 }
 
 
