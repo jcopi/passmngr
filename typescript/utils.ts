@@ -457,9 +457,15 @@ export class Crypto {
     }
 }*/
 
-type SymmetricKeyPair = {
+export type SymmetricKeyPair = {
     aes: CryptoKey;
     hmac: CryptoKey;
+}
+
+export type AsymmetricKeyPair = {
+    public: ArrayBuffer;
+    private: CryptoKey;
+    salt: ArrayBuffer;
 }
 
 export class crypto {
@@ -497,9 +503,9 @@ export class crypto {
                 return null;
             }
     
-            let pbkdf2Params = {name: "PBKDF2", iterations: symmetricCrypto.PBKDF_ITERATIONS, salt: combinedSalt, hash: symmetricCrypto.PBKDF_HASH};
             let bits: ArrayBuffer = null;
             try {
+                let pbkdf2Params = {name: "PBKDF2", iterations: symmetricCrypto.PBKDF_ITERATIONS, salt: combinedSalt, hash: symmetricCrypto.PBKDF_HASH};
                 bits = await window.crypto.subtle.deriveBits(pbkdf2Params, rawKey, 512);
             } catch (ex) {
                 return null;
@@ -518,19 +524,19 @@ export class crypto {
                 return null;
             }
             
-            let aesHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: aesSalt, hash: symmetricCrypto.HKDF_HASH};
-            let aesParams = {name: "AES-CBC", length: symmetricCrypto.AES_KEY_LENGTH};
             let aesKey: CryptoKey = null;
             try {
+                let aesHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: aesSalt, hash: symmetricCrypto.HKDF_HASH};
+                let aesParams = {name: "AES-CBC", length: symmetricCrypto.AES_KEY_LENGTH};
                 aesKey = await window.crypto.subtle.deriveKey(aesHkdfParams as any, aesRaw, aesParams, false, ["encrypt", "decrypt"]);
             } catch (ex) {
                 return null;
             }
     
-            let hmacHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: hmacSalt, hash: symmetricCrypto.HKDF_HASH};
-            let hmacParams = {name: "HMAC", hash: symmetricCrypto.HMAC_HASH};
             let hmacKey: CryptoKey = null;
             try {
+                let hmacHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: hmacSalt, hash: symmetricCrypto.HKDF_HASH};
+                let hmacParams = {name: "HMAC", hash: symmetricCrypto.HMAC_HASH};
                 hmacKey = await window.crypto.subtle.deriveKey(hmacHkdfParams as any, hmacRaw, hmacParams, false, ["sign", "verify"]);
             } catch (ex) {
                 return null;
@@ -559,19 +565,19 @@ export class crypto {
                 return null;
             }
             
-            let aesHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: aesSalt, hash: symmetricCrypto.HKDF_HASH};
-            let aesParams = {name: "AES-CBC", length: symmetricCrypto.AES_KEY_LENGTH};
             let aesKey: CryptoKey = null;
             try {
+                let aesHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: aesSalt, hash: symmetricCrypto.HKDF_HASH};
+                let aesParams = {name: "AES-CBC", length: symmetricCrypto.AES_KEY_LENGTH};
                 aesKey = await window.crypto.subtle.deriveKey(aesHkdfParams as any, aesRawKey, aesParams, false, ["encrypt", "decrypt"]);
             } catch (ex) {
                 return null;
             }
     
-            let hmacHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: hmacSalt, hash: symmetricCrypto.HKDF_HASH};
-            let hmacParams = {name: "HMAC", hash: symmetricCrypto.HMAC_HASH};
             let hmacKey: CryptoKey = null;
             try {
+                let hmacHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: hmacSalt, hash: symmetricCrypto.HKDF_HASH};
+                let hmacParams = {name: "HMAC", hash: symmetricCrypto.HMAC_HASH};
                 hmacKey = await window.crypto.subtle.deriveKey(hmacHkdfParams as any, hmacRawKey, hmacParams, false, ["sign", "verify"]);
             } catch (ex) {
                 return null;
@@ -587,9 +593,9 @@ export class crypto {
             }
             let ivArr = new Uint8Array(iv);
     
-            let aesParams = {name: "AES-CBC", iv: iv};
             let cipher: ArrayBuffer = null;
             try {
+                let aesParams = {name: "AES-CBC", iv: iv};
                 cipher = await window.crypto.subtle.encrypt(aesParams, keys.aes, data);
             } catch (ex) {
                 return null;
@@ -661,6 +667,123 @@ export class crypto {
     };
 
     static asymmetric = class asymmetricCrypto {
+        static ECDH_SALT_BYTE_CNT: number = 32;
+        static ECDH_SHARED_LENGTH: number = 528;
+
+        static async generateKeyPair (): Promise<AsymmetricKeyPair> {
+            let rawKeyPair: CryptoKeyPair = null;
+            try {
+                let ecdhParams = {name:"ECDH", namedCurve:"P-521"};
+                rawKeyPair = await window.crypto.subtle.generateKey(ecdhParams, false, ["deriveKey", "deriveBits"]);
+            } catch (ex) {
+                return null;
+            }
+
+            let extractedPublic: ArrayBuffer = null;
+            try {
+                await window.crypto.subtle.exportKey("raw", rawKeyPair.publicKey);
+            } catch (ex) {
+                return null;
+            }
+
+            let salt = crypto.randomBytes(asymmetricCrypto.ECDH_SALT_BYTE_CNT);
+            if (salt === null) return null;
+
+            return {public: extractedPublic, private: rawKeyPair.privateKey, salt: salt};
+        }
+
+        static async marshallPublicKey (keys: AsymmetricKeyPair, info: ArrayBuffer): Promise<ArrayBuffer> {
+            let saltArr = new Uint8Array(keys.salt);
+            let publicArr = new Uint8Array(keys.public);
+            let infoArr = new Uint8Array(info);
+
+            let buffer = new Uint8Array(1 + saltArr.length + 1 + publicArr.length + infoArr.length);
+            buffer.set([saltArr.length]);
+            buffer.set(saltArr, 1);
+            buffer.set([publicArr.length], 1 + saltArr.length);
+            buffer.set(publicArr, 1 + saltArr.length + 1);
+            buffer.set(infoArr, 1 + saltArr.length + 1 + publicArr.length);
+
+            return buffer;
+        }
+
+        static async unmarshallPublicKey (data: ArrayBuffer): Promise<[AsymmetricKeyPair, ArrayBuffer]> {
+            if (data.byteLength <= 0) return null;
+
+            let dataArr = new Uint8Array(data);
+            let saltLength = dataArr[0];
+            if (dataArr.length <= 1 + saltLength) return null;
+
+            let salt = dataArr.slice(1, 1 + saltLength);
+            let publicLength = dataArr[1 + saltLength];
+            if (dataArr.length < 1 + saltLength + 1 + publicLength) return null;
+
+            let publicKey = dataArr.slice(1 + saltLength + 1, 1 + saltLength + 1 + publicLength);
+            let info = dataArr.slice(1 + saltLength + 1 + publicLength);
+
+            return [{private: null, public: publicKey, salt: salt}, info]
+        }
+
+        static async deriveSharedSymmetricKeys (personalKeys: AsymmetricKeyPair, othersKeys: AsymmetricKeyPair, serverRole: boolean): Promise<SymmetricKeyPair> {
+            if (personalKeys.private === null || personalKeys.public === null || personalKeys.salt === null) 
+                return null;
+            if (othersKeys.public === null || othersKeys.salt === null || othersKeys.private !== null)
+                return null;
+
+            let rawOtherPublic: CryptoKey = null;
+            try {
+                let ecdhParams = {name:"ECDH", namedCurve:"P-521"};
+                rawOtherPublic = await window.crypto.subtle.importKey("raw", othersKeys.public, ecdhParams, false, ["deriveBits"])
+            } catch (ex) {
+                return null;
+            }
+
+            let sharedBits: ArrayBuffer = null;
+            try {
+                let ecdhParams = {name:"ECDH", namedCurve:"P-521", public:rawOtherPublic};
+                sharedBits = await window.crypto.subtle.deriveBits(ecdhParams, personalKeys.private, asymmetricCrypto.ECDH_SHARED_LENGTH);
+            } catch (ex) {
+                return null;
+            }
+
+            let sharedArr = new Uint8Array(sharedBits);
+            if (sharedArr[0] === 0) {
+                sharedArr = sharedArr.slice(1);
+            }
         
-    }
+            let othersSaltArr = new Uint8Array(othersKeys.salt);
+            let personalSaltArr = new Uint8Array(personalKeys.salt);
+            let hmacSalt: Uint8Array = null;
+            let aesSalt: Uint8Array = null;
+
+            if (serverRole) {
+                let personalHmacSalt = personalSaltArr.slice(0, Math.floor(personalSaltArr.length / 2));
+                let personalAesSalt = personalSaltArr.slice(Math.floor(personalSaltArr.length / 2));
+                let othersHmacSalt = othersSaltArr.slice(Math.floor(othersSaltArr.length / 2));
+                let othersAesSalt = othersSaltArr.slice(0, Math.floor(othersSaltArr.length / 2));
+
+                hmacSalt = new Uint8Array(personalHmacSalt.length + othersHmacSalt.length);
+                aesSalt = new Uint8Array(othersAesSalt.length + personalAesSalt.length);
+                hmacSalt.set(personalHmacSalt);
+                hmacSalt.set(othersHmacSalt, personalHmacSalt.length);
+                aesSalt.set(othersAesSalt);
+                aesSalt.set(personalAesSalt, othersAesSalt.length);
+            } else {
+                let personalAesSalt = personalSaltArr.slice(0, Math.floor(personalSaltArr.length / 2));
+                let personalHmacSalt = personalSaltArr.slice(Math.floor(personalSaltArr.length / 2));
+                let othersAesSalt = othersSaltArr.slice(Math.floor(othersSaltArr.length / 2));
+                let othersHmacSalt = othersSaltArr.slice(0, Math.floor(othersSaltArr.length / 2));
+
+                hmacSalt = new Uint8Array(personalHmacSalt.length + othersHmacSalt.length);
+                aesSalt = new Uint8Array(othersAesSalt.length + personalAesSalt.length);
+                hmacSalt.set(othersHmacSalt);
+                hmacSalt.set(personalHmacSalt, othersHmacSalt.length);
+                aesSalt.set(personalAesSalt);
+                aesSalt.set(othersAesSalt, personalAesSalt.length);
+            }
+
+            let keys = await crypto.symmetric.deriveKeysFromBytes(sharedArr.buffer, aesSalt.buffer, hmacSalt.buffer);
+            return keys;
+        }
+    };
 }
