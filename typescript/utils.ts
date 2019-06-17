@@ -278,7 +278,7 @@ export class Algos {
     }
 }
 
-type SymmetricKeyPair = [CryptoKey, CryptoKey];
+/*type SymmetricKeyPair = [CryptoKey, CryptoKey];
 
 type AsymmetricKeyPair = [ArrayBuffer, CryptoKey];
 
@@ -454,5 +454,213 @@ export class Crypto {
         }
     
         return shared;
+    }
+}*/
+
+type SymmetricKeyPair = {
+    aes: CryptoKey;
+    hmac: CryptoKey;
+}
+
+export class crypto {
+    static randomBytes (count: number): ArrayBuffer {
+        let buffer = new Uint8Array(count);
+        try {
+            window.crypto.getRandomValues(buffer);
+        } catch (ex) {
+            return null;
+        }
+        return buffer;
+    }
+
+    static symmetric = class symmetricCrypto {
+        static PBKDF_ITERATIONS: number = 5;
+        static PBKDF_HASH: string = "SHA-512";
+        static HKDF_HASH: string = "SHA-256";
+        static HMAC_HASH: string = "SHA-256";
+        static AES_KEY_LENGTH: number = 256;
+        static AES_KEY_BYTE_CNT: number = 32;
+        static AES_CBC_IV_BYTE_CNT: number = 16;
+    
+        static async deriveKeysFromPassword (password: string, aesSalt: ArrayBuffer, hmacSalt: ArrayBuffer): Promise<SymmetricKeyPair> {
+            let aesSaltArr = new Uint8Array(aesSalt);
+            let hmacSaltArr = new Uint8Array(hmacSalt);
+            
+            let combinedSalt = new Uint8Array(aesSaltArr.length + hmacSaltArr.length);
+            combinedSalt.set(aesSaltArr);
+            combinedSalt.set(hmacSaltArr, aesSaltArr.length);
+    
+            let rawKey: CryptoKey = null;
+            try {
+                rawKey = await window.crypto.subtle.importKey("raw", StringEncoding.toUTF8(password), "PBKDF2", false, ["deriveBits"]);
+            } catch (ex) {
+                return null;
+            }
+    
+            let pbkdf2Params = {name: "PBKDF2", iterations: symmetricCrypto.PBKDF_ITERATIONS, salt: combinedSalt, hash: symmetricCrypto.PBKDF_HASH};
+            let bits: ArrayBuffer = null;
+            try {
+                bits = await window.crypto.subtle.deriveBits(pbkdf2Params, rawKey, 512);
+            } catch (ex) {
+                return null;
+            }
+            let bitsArr = new Uint8Array(bits);
+    
+            let aesBits = bitsArr.slice(0, Math.floor(bitsArr.length / 2));
+            let hmacBits = bitsArr.slice(Math.floor(bitsArr.length / 2));
+    
+            let aesRaw: CryptoKey = null;
+            let hmacRaw: CryptoKey = null;
+            try {
+                aesRaw = await window.crypto.subtle.importKey("raw", aesBits, "HKDF", false, ["deriveKey"]);
+                hmacRaw = await window.crypto.subtle.importKey("raw", hmacBits, "HKDF", false, ["deriveKey"]);
+            } catch (ex) {
+                return null;
+            }
+            
+            let aesHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: aesSalt, hash: symmetricCrypto.HKDF_HASH};
+            let aesParams = {name: "AES-CBC", length: symmetricCrypto.AES_KEY_LENGTH};
+            let aesKey: CryptoKey = null;
+            try {
+                aesKey = await window.crypto.subtle.deriveKey(aesHkdfParams as any, aesRaw, aesParams, false, ["encrypt", "decrypt"]);
+            } catch (ex) {
+                return null;
+            }
+    
+            let hmacHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: hmacSalt, hash: symmetricCrypto.HKDF_HASH};
+            let hmacParams = {name: "HMAC", hash: symmetricCrypto.HMAC_HASH};
+            let hmacKey: CryptoKey = null;
+            try {
+                hmacKey = await window.crypto.subtle.deriveKey(hmacHkdfParams as any, hmacRaw, hmacParams, false, ["sign", "verify"]);
+            } catch (ex) {
+                return null;
+            }
+    
+            return {aes: aesKey, hmac: hmacKey};
+        }
+    
+        static async deriveKeysFromBytes (bytes: ArrayBuffer, aesSalt: ArrayBuffer, hmacSalt: ArrayBuffer): Promise<SymmetricKeyPair> {
+            let bytesArr = new Uint8Array(bytes);
+            let hmacArr: Uint8Array = null;
+            let aesArr: Uint8Array = null;
+            if (bytesArr.length > symmetricCrypto.AES_KEY_BYTE_CNT) {
+                aesArr = bytesArr.slice(0, Math.floor(bytesArr.length / 2));
+                hmacArr = bytesArr.slice(Math.floor(bytesArr.length / 2));
+            } else {
+                aesArr = bytesArr;
+                hmacArr = bytesArr;
+            }
+            let aesRawKey: CryptoKey = null;
+            let hmacRawKey: CryptoKey = null;
+            try {
+                aesRawKey = await window.crypto.subtle.importKey("raw", aesArr, "HKDF", false, ["deriveKey"]);
+                hmacRawKey = await window.crypto.subtle.importKey("raw", hmacArr, "HKDF", false, ["deriveKey"]);
+            } catch (ex) {
+                return null;
+            }
+            
+            let aesHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: aesSalt, hash: symmetricCrypto.HKDF_HASH};
+            let aesParams = {name: "AES-CBC", length: symmetricCrypto.AES_KEY_LENGTH};
+            let aesKey: CryptoKey = null;
+            try {
+                aesKey = await window.crypto.subtle.deriveKey(aesHkdfParams as any, aesRawKey, aesParams, false, ["encrypt", "decrypt"]);
+            } catch (ex) {
+                return null;
+            }
+    
+            let hmacHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: hmacSalt, hash: symmetricCrypto.HKDF_HASH};
+            let hmacParams = {name: "HMAC", hash: symmetricCrypto.HMAC_HASH};
+            let hmacKey: CryptoKey = null;
+            try {
+                hmacKey = await window.crypto.subtle.deriveKey(hmacHkdfParams as any, hmacRawKey, hmacParams, false, ["sign", "verify"]);
+            } catch (ex) {
+                return null;
+            }
+    
+            return {aes: aesKey, hmac: hmacKey};
+        }
+    
+        static async encrypt (keys: SymmetricKeyPair, data: ArrayBuffer): Promise<ArrayBuffer> {
+            let iv = crypto.randomBytes(symmetricCrypto.AES_CBC_IV_BYTE_CNT);
+            if (iv === null) {
+                return null;
+            }
+            let ivArr = new Uint8Array(iv);
+    
+            let aesParams = {name: "AES-CBC", iv: iv};
+            let cipher: ArrayBuffer = null;
+            try {
+                cipher = await window.crypto.subtle.encrypt(aesParams, keys.aes, data);
+            } catch (ex) {
+                return null;
+            }
+            let cipherArr = new Uint8Array(cipher);
+    
+            let combinedCT = new Uint8Array(ivArr.length + cipherArr.length);
+            combinedCT.set(ivArr);
+            combinedCT.set(cipherArr, ivArr.length);
+    
+            let signature: ArrayBuffer = null;
+            try {
+                signature = await window.crypto.subtle.sign("HMAC", keys.hmac, combinedCT);
+            } catch (ex) {
+                return null;
+            }
+            let sigArr = new Uint8Array(signature);
+    
+            let resultArr = new Uint8Array(1 + sigArr.length + 1 + ivArr.length + cipherArr.length);
+            resultArr.set([sigArr.length]);
+            resultArr.set(sigArr, 1);
+    
+            resultArr.set([ivArr.length], 1 + sigArr.length);
+            resultArr.set(ivArr, 1 + sigArr.length + 1);
+    
+            resultArr.set(cipherArr, 1 + sigArr.length + 1 + ivArr.length);
+    
+            return resultArr.buffer;
+        }
+    
+        static async decrypt (keys: SymmetricKeyPair, data: ArrayBuffer): Promise<ArrayBuffer> {
+            if (data.byteLength <= 0) return null;
+            
+            let dataArr = new Uint8Array(data);
+            let hmacLength = dataArr[0]
+            if (dataArr.length <= hmacLength + 1) return null;
+    
+            let hmac = dataArr.slice(1, 1 + hmacLength);
+            let ivLength = dataArr[1 + hmacLength];
+            if (dataArr.length <= 1 + hmac.length + 1 + ivLength) return null;
+    
+            let iv = dataArr.slice(1 + hmac.length + 1, 1 + hmac.length + 1 + ivLength);
+            let cipher = dataArr.slice(1 + hmac.length + 1 + ivLength);
+    
+            let combinedCT = new Uint8Array(iv.length + cipher.length);
+            combinedCT.set(iv);
+            combinedCT.set(cipher, iv.length);
+    
+            let verified: boolean = false;
+            try {
+                verified = await window.crypto.subtle.verify("HMAC", keys.hmac, hmac, combinedCT);
+                if (!verified) {
+                    return null;
+                }
+            } catch (ex) {
+                return null;
+            }
+    
+            let message: ArrayBuffer = null;
+            try {
+                let aesParams = {name: "AES-CBC", iv: iv};
+                message = await window.crypto.subtle.decrypt(aesParams, keys.aes, cipher);
+            } catch (ex) {
+                return null;
+            }
+    
+            return message;
+        }
+    };
+
+    static asymmetric = class asymmetricCrypto {
+        
     }
 }
