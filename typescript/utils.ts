@@ -545,7 +545,7 @@ export class crypto {
             return {aes: aesKey, hmac: hmacKey};
         }
     
-        static async deriveKeysFromBytes (bytes: ArrayBuffer, aesSalt: ArrayBuffer, hmacSalt: ArrayBuffer): Promise<SymmetricKeyPair> {
+        static async deriveKeysFromBytes (bytes: ArrayBuffer, aesSalt: ArrayBuffer, hmacSalt: ArrayBuffer, info: ArrayBuffer): Promise<SymmetricKeyPair> {
             let bytesArr = new Uint8Array(bytes);
             let hmacArr: Uint8Array = null;
             let aesArr: Uint8Array = null;
@@ -567,7 +567,7 @@ export class crypto {
             
             let aesKey: CryptoKey = null;
             try {
-                let aesHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: aesSalt, hash: symmetricCrypto.HKDF_HASH};
+                let aesHkdfParams = {name: "HKDF", info: info, salt: aesSalt, hash: symmetricCrypto.HKDF_HASH};
                 let aesParams = {name: "AES-CBC", length: symmetricCrypto.AES_KEY_LENGTH};
                 aesKey = await window.crypto.subtle.deriveKey(aesHkdfParams as any, aesRawKey, aesParams, false, ["encrypt", "decrypt"]);
             } catch (ex) {
@@ -576,7 +576,7 @@ export class crypto {
     
             let hmacKey: CryptoKey = null;
             try {
-                let hmacHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: hmacSalt, hash: symmetricCrypto.HKDF_HASH};
+                let hmacHkdfParams = {name: "HKDF", info: info, salt: hmacSalt, hash: symmetricCrypto.HKDF_HASH};
                 let hmacParams = {name: "HMAC", hash: symmetricCrypto.HMAC_HASH};
                 hmacKey = await window.crypto.subtle.deriveKey(hmacHkdfParams as any, hmacRawKey, hmacParams, false, ["sign", "verify"]);
             } catch (ex) {
@@ -724,7 +724,7 @@ export class crypto {
             return [{private: null, public: publicKey, salt: salt}, info]
         }
 
-        static async deriveSharedSymmetricKeys (personalKeys: AsymmetricKeyPair, othersKeys: AsymmetricKeyPair, serverRole: boolean): Promise<SymmetricKeyPair> {
+        static async deriveSharedSymmetricKeys (personalKeys: AsymmetricKeyPair, othersKeys: AsymmetricKeyPair, info: ArrayBuffer, serverRole: boolean): Promise<SymmetricKeyPair> {
             if (personalKeys.private === null || personalKeys.public === null || personalKeys.salt === null) 
                 return null;
             if (othersKeys.public === null || othersKeys.salt === null || othersKeys.private !== null)
@@ -782,7 +782,7 @@ export class crypto {
                 aesSalt.set(othersAesSalt, personalAesSalt.length);
             }
 
-            let keys = await crypto.symmetric.deriveKeysFromBytes(sharedArr.buffer, aesSalt.buffer, hmacSalt.buffer);
+            let keys = await crypto.symmetric.deriveKeysFromBytes(sharedArr.buffer, aesSalt.buffer, hmacSalt.buffer, info);
             return keys;
         }
     };
