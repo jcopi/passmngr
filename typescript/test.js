@@ -1,12 +1,12 @@
-import * as Utils from "./build/utils.js"
+import * as utils from "./build/utils.js"
 
 async function DoPBKDF2 (string) {
 	let password = string;
-	let aessalt  = Utils.Crypto.RandomBytes(256 / 8);
-	let hmacsalt = Utils.Crypto.RandomBytes(256 / 8);
-	let rawkey   = await Utils.Crypto.StringToRawKey(password);
-	let keypair  = await Utils.Crypto.RawKeyToSymmetricKeyPair(rawkey, aessalt, hmacsalt);
+	let aessalt  = utils.crypto.randomBytes(256 / 8);
+	let hmacsalt = utils.crypto.randomBytes(256 / 8);
+	let keypair = await utils.crypto.symmetric.deriveKeysFromPassword(password, aessalt, hmacsalt);
 	keypair !== null && false;
+	return true;
 }
 
 async function init() {
@@ -15,7 +15,8 @@ async function init() {
 	let times = [];
 	for (let i = 0; i < list.length; ++i) {
 		let start = Date.now();
-		let x = await DoPBKDF2(list[i]);
+		//let x = await DoPBKDF2(list[i]);
+		//if (!x) break;
 		times.push(Date.now() - start);
 	}
 	console.log(times.map((v,i) => {return [list[i].length, v]}));
@@ -24,72 +25,48 @@ async function init() {
 
 	let plaintext = "The quick brown fox jumped over the lazy dog.";
 	console.log("Plaintext:", plaintext);
-	let ptbuffer = Utils.StringEncoding.toUTF8(plaintext);
+	let ptbuffer = utils.stringEncoding.toUTF8(plaintext);
 
 	let password = "password";
-	let aessalt  = Utils.Crypto.RandomBytes(256 / 8);
-	let hmacsalt = Utils.Crypto.RandomBytes(256 / 8);
-	let rawkey   = await Utils.Crypto.StringToRawKey(password);
-	let keypair  = await Utils.Crypto.RawKeyToSymmetricKeyPair(rawkey, aessalt, hmacsalt);
-	let ctbuffer = await Utils.Crypto.SymmetricEncrypt(keypair, ptbuffer);
-	console.log("Ciphertext: ", Utils.StringEncoding.fromUTF8(ctbuffer));
+	let aessalt  = utils.crypto.randomBytes(256 / 8);
+	let hmacsalt = utils.crypto.randomBytes(256 / 8);
+	let keypair  = await utils.crypto.symmetric.deriveKeysFromPassword(password, aessalt, hmacsalt);
+	let ctbuffer = await utils.crypto.symmetric.encrypt(keypair, ptbuffer);
+	console.log("Ciphertext: ", utils.stringEncoding.fromUTF8(ctbuffer));
 
-	let dptbuffer = await Utils.Crypto.SymmetricDecrypt(keypair, ctbuffer);
-	console.log("Plaintext:", Utils.StringEncoding.fromUTF8(dptbuffer));
+	let dptbuffer = await utils.crypto.symmetric.decrypt(keypair, ctbuffer);
+	console.log("Plaintext:", utils.stringEncoding.fromUTF8(dptbuffer));
 
-	/*console.log("TESTING ASYMMETRIC ENCRYPTION");
-	let [apublic, aprivate] = await Utils.Crypto.GenerateAsymmetricKeyPair();
-	let [bpublic, bprivate] = await Utils.Crypto.GenerateAsymmetricKeyPair();
-	let asalt = Utils.Crypto.RandomBytes(Utils.Crypto.gcmNonceLength);
-	let bsalt = Utils.Crypto.RandomBytes(Utils.Crypto.gcmNonceLength);
+	console.log("TESTING ASYMMETRIC ENCRYPTION");
 
-	let apacket = Utils.Channel.PackPublicKey(apublic, asalt);
-	let bpacket = Utils.Channel.PackPublicKey(bpublic, bsalt);
+	console.log("Generating ECC keys.");
+	let aliceKeys = await utils.crypto.asymmetric.generateKeyPair();
+	let bobKeys = await utils.crypto.asymmetric.generateKeyPair();
 
-	console.log("A's Public Key Packet: ", Utils.BufferEncoding.toBase64(apacket));
-	console.log("B's Public Key Packet: ", Utils.BufferEncoding.toBase64(bpacket));
+	console.log("Exchanging public keys and salts.");
+	let alicePublicMessage = await utils.crypto.asymmetric.marshallPublicKey(aliceKeys, new ArrayBuffer(0));
+	let bobPublicMessage = await utils.crypto.asymmetric.marshallPublicKey(bobKeys, new ArrayBuffer(0));
+	let [aliceKnowledgeOfBob, ax] = await utils.crypto.asymmetric.unmarshallPublicKey(bobPublicMessage);
+	let [bobKnowledgeOfAlice, bx] = await utils.crypto.asymmetric.unmarshallPublicKey(alicePublicMessage);
 
-	// Process B's Public Key packet as A
-	let [abpublic, absalt] = Utils.Channel.UnpackPublicKey(bpacket);
-    let abothsalt = new Uint8Array(asalt.byteLength + absalt.byteLength);
-    abothsalt.set(new Uint8Array(asalt)); abothsalt.set(new Uint8Array(absalt), asalt.byteLength);
+	console.log("Computing shared symmetric keys.");
+	let aliceComputedKeys = await utils.crypto.asymmetric.deriveSharedSymmetricKeys(aliceKeys, aliceKnowledgeOfBob, new ArrayBuffer(0), false);
+	let bobComputedKeys = await utils.crypto.asymmetric.deriveSharedSymmetricKeys(bobKeys, bobKnowledgeOfAlice, new ArrayBuffer(0), true);
 
-    let awrappedKey = await Utils.Crypto.PublicBytesToRawKey(abpublic);
-	let asharedBytes = await Utils.Crypto.DeriveSharedSecret(awrappedKey, aprivate);
-	console.log("A's computed shared secret: ", Utils.BufferEncoding.toBase64(asharedBytes));
-	let start = Date.now();
-	let asymkeys = await Utils.Crypto.DerivedKeyToSymmetricKeyPair(asharedBytes, abothsalt.buffer, new ArrayBuffer(0));
-	console.log("A's HKDF Took " + (Date.now() - start).toFixed(2) + "ms");
-	// Process A's Public Key packet as B
-	let [bapublic, basalt] = Utils.Channel.UnpackPublicKey(apacket);
-    let bbothsalt = new Uint8Array(basalt.byteLength + bsalt.byteLength);
-    bbothsalt.set(new Uint8Array(basalt)); bbothsalt.set(new Uint8Array(bsalt), basalt.byteLength);
+	let aliceSecretMessage = "abcdefghijklmnopqrstuvwxyz0123456789";
+	let bobSecretMessage = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-    let bwrappedKey = await Utils.Crypto.PublicBytesToRawKey(bapublic);
-	let bsharedBytes = await Utils.Crypto.DeriveSharedSecret(bwrappedKey, bprivate);
-	console.log("B's computed shared secret: ", Utils.BufferEncoding.toBase64(bsharedBytes));
-	start = Date.now();
-	let bsymkeys = await Utils.Crypto.DerivedKeyToSymmetricKeyPair(bsharedBytes, bbothsalt.buffer, new ArrayBuffer(0));
-	console.log("B's HKDF Took " + (Date.now() - start).toFixed(2) + "ms");
+	console.log("Alice encrypting message: " + aliceSecretMessage);
+	console.log(aliceComputedKeys);
+	let aliceEncryptedMessage = await utils.crypto.symmetric.encrypt(aliceComputedKeys, utils.stringEncoding.toUTF8(aliceSecretMessage));
+	let bobDecryptedMessage = await utils.crypto.symmetric.decrypt(bobComputedKeys, aliceEncryptedMessage);
+	console.log("Bob decrypted as: " + stringEncoding.fromUTF8(bobDecryptedMessage));
 
-	// Encrypt plain text with a's sym key, decrypt with b's sym key
-	let abplain = "Encrypt plain text with a's sym key, decrypt with b's sym key";
-	console.log("Plaintext: ", abplain);
-	let abctbuf = await Utils.Crypto.SymmetricEncrypt(asymkeys, Utils.StringEncoding.toUTF8(abplain));
-	console.log("Ciphertext: ", Utils.StringEncoding.fromUTF8(abctbuf));
-	let baplain = await Utils.Crypto.SymmetricDecrypt(bsymkeys, abctbuf);
-	console.log("Plaintext: ", Utils.StringEncoding.fromUTF8(baplain));
-
-	// Encrypt plain text with b's sym key, decrypt with a's sym key
-	baplain = "Encrypt plain text with b's sym key, decrypt with a's sym key";
-	console.log("Plaintext: ", baplain);
-	let bactbuf = await Utils.Crypto.SymmetricEncrypt(bsymkeys, Utils.StringEncoding.toUTF8(baplain));
-	console.log("Ciphertext: ", Utils.StringEncoding.fromUTF8(bactbuf));
-	abplain = await Utils.Crypto.SymmetricDecrypt(asymkeys, bactbuf);
-	console.log("Plaintext: ", Utils.StringEncoding.fromUTF8(abplain));
-	*/
+	console.log("Bob encrypting message: " + bobSecretMessage);
+	let bobEncryptedMessage = await utils.crypto.symmetric.encrypt(bobComputedKeys, utils.stringEncoding.toUTF8(bobSecretMessage));
+	let aliceDecryptedMessage = await utils.crypto.symmetric.decrypt(aliceComputedKeys, bobEncryptedMessage);
+	console.log("Bob decrypted as: " + stringEncoding.fromUTF8(aliceDecryptedMessage));
 }
 
-
 init();
-window.utils = Utils;
+window.utils = utils;
