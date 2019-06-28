@@ -505,7 +505,7 @@ export class crypto {
 
             let extractedPublic: ArrayBuffer = null;
             try {
-                await window.crypto.subtle.exportKey("raw", rawKeyPair.publicKey);
+                extractedPublic = await window.crypto.subtle.exportKey("raw", rawKeyPair.publicKey);
             } catch (ex) {
                 return null;
             }

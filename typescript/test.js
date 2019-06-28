@@ -10,7 +10,7 @@ async function DoPBKDF2 (string) {
 }
 
 async function init() {
-	console.log("PERFORMANCE TESTING PBKDF2");
+	/*console.log("PERFORMANCE TESTING PBKDF2");
 	let list = ["password", "abcdefghijklmnop", "12345678", "a bad password", "batterystaplehorsecorrect", "!@testT3sTtESt123"]
 	let times = [];
 	for (let i = 0; i < list.length; ++i) {
@@ -19,7 +19,7 @@ async function init() {
 		//if (!x) break;
 		times.push(Date.now() - start);
 	}
-	console.log(times.map((v,i) => {return [list[i].length, v]}));
+	console.log(times.map((v,i) => {return [list[i].length, v]}));*/
 
 	console.log("TESTING SYMMETRIC ENCRYPTION")
 
@@ -60,12 +60,12 @@ async function init() {
 	console.log(aliceComputedKeys);
 	let aliceEncryptedMessage = await utils.crypto.symmetric.encrypt(aliceComputedKeys, utils.stringEncoding.toUTF8(aliceSecretMessage));
 	let bobDecryptedMessage = await utils.crypto.symmetric.decrypt(bobComputedKeys, aliceEncryptedMessage);
-	console.log("Bob decrypted as: " + stringEncoding.fromUTF8(bobDecryptedMessage));
+	console.log("Bob decrypted as: " + utils.stringEncoding.fromUTF8(bobDecryptedMessage));
 
 	console.log("Bob encrypting message: " + bobSecretMessage);
 	let bobEncryptedMessage = await utils.crypto.symmetric.encrypt(bobComputedKeys, utils.stringEncoding.toUTF8(bobSecretMessage));
 	let aliceDecryptedMessage = await utils.crypto.symmetric.decrypt(aliceComputedKeys, bobEncryptedMessage);
-	console.log("Bob decrypted as: " + stringEncoding.fromUTF8(aliceDecryptedMessage));
+	console.log("Alice decrypted as: " + utils.stringEncoding.fromUTF8(aliceDecryptedMessage));
 }
 
 init();
