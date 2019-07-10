@@ -284,7 +284,7 @@ export type SymmetricKeyPair = {
 }
 
 export type AsymmetricKeyPair = {
-    public: ArrayBuffer;
+    public: CryptoKey;
     private: CryptoKey;
     salt: ArrayBuffer;
 }
@@ -488,128 +488,150 @@ export class crypto {
     
             return message;
         }
+
+        static async sign (keys: SymmetricKeyPair, data: ArrayBuffer): Promise<ArrayBuffer> {
+
+        }
+
+        static async verify (keys: SymmetricKeyPair, data: ArrayBuffer, signature: ArrayBuffer): Promise<boolean> {
+
+        }
     };
 
     static asymmetric = class asymmetricCrypto {
-        static ECDH_SALT_BYTE_CNT: number = 32;
-        static ECDH_SHARED_LENGTH: number = 528;
+        static ecdh = class ecdhCrypto {
+            static ECDH_SALT_BYTE_CNT: number = 32;
+            static ECDH_SHARED_LENGTH: number = 528;
 
-        static async generateKeyPair (): Promise<AsymmetricKeyPair> {
-            let rawKeyPair: CryptoKeyPair = null;
-            try {
-                let ecdhParams = {name:"ECDH", namedCurve:"P-521"};
-                rawKeyPair = await window.crypto.subtle.generateKey(ecdhParams, false, ["deriveKey", "deriveBits"]);
-            } catch (ex) {
-                return null;
+            static async generateKeyPair (): Promise<AsymmetricKeyPair> {
+                let rawKeyPair: CryptoKeyPair = null;
+                try {
+                    let ecdhParams = {name:"ECDH", namedCurve:"P-521"};
+                    rawKeyPair = await window.crypto.subtle.generateKey(ecdhParams, false, ["deriveKey", "deriveBits"]);
+                } catch (ex) {
+                    return null;
+                }
+
+                let salt = crypto.randomBytes(ecdhCrypto.ECDH_SALT_BYTE_CNT);
+                if (salt === null) return null;
+
+                return {public: rawKeyPair.publicKey, private: rawKeyPair.privateKey, salt: salt};
             }
 
-            let extractedPublic: ArrayBuffer = null;
-            try {
-                extractedPublic = await window.crypto.subtle.exportKey("raw", rawKeyPair.publicKey);
-            } catch (ex) {
-                return null;
+            static async marshallPublicKey (keys: AsymmetricKeyPair, info: ArrayBuffer): Promise<ArrayBuffer> {
+                let extractedPublic: ArrayBuffer = null;
+                try {
+                    extractedPublic = await window.crypto.subtle.exportKey("raw", keys.public);
+                } catch (ex) {
+                    return null;
+                }
+                
+                let saltArr = new Uint8Array(keys.salt);
+                let publicArr = new Uint8Array(extractedPublic);
+                let infoArr = new Uint8Array(info);
+
+                let buffer = new Uint8Array(1 + saltArr.length + 1 + publicArr.length + infoArr.length);
+                buffer.set([saltArr.length]);
+                buffer.set(saltArr, 1);
+                buffer.set([publicArr.length], 1 + saltArr.length);
+                buffer.set(publicArr, 1 + saltArr.length + 1);
+                buffer.set(infoArr, 1 + saltArr.length + 1 + publicArr.length);
+
+                return buffer;
             }
 
-            let salt = crypto.randomBytes(asymmetricCrypto.ECDH_SALT_BYTE_CNT);
-            if (salt === null) return null;
+            static async unmarshallPublicKey (data: ArrayBuffer): Promise<[AsymmetricKeyPair, ArrayBuffer]> {
+                if (data.byteLength <= 0) return null;
 
-            return {public: extractedPublic, private: rawKeyPair.privateKey, salt: salt};
+                let dataArr = new Uint8Array(data);
+                let saltLength = dataArr[0];
+                if (dataArr.length <= 1 + saltLength) return null;
+
+                let salt = dataArr.slice(1, 1 + saltLength);
+                let publicLength = dataArr[1 + saltLength];
+                if (dataArr.length < 1 + saltLength + 1 + publicLength) return null;
+
+                let publicKey = dataArr.slice(1 + saltLength + 1, 1 + saltLength + 1 + publicLength);
+                let info = dataArr.slice(1 + saltLength + 1 + publicLength);
+
+                let rawPublic: CryptoKey = null;
+                try {
+                    let ecdhParams = {name:"ECDH", namedCurve:"P-521"};
+                    rawPublic = await window.crypto.subtle.importKey("raw", publicKey, ecdhParams, false, ["deriveBits"])
+                } catch (ex) {
+                    return null;
+                }
+
+                return [{private: null, public: rawPublic, salt: salt}, info]
+            }
+
+            static async deriveSharedSymmetricKeys (personalKeys: AsymmetricKeyPair, othersKeys: AsymmetricKeyPair, info: ArrayBuffer, serverRole: boolean): Promise<SymmetricKeyPair> {
+                if (personalKeys.private === null || personalKeys.public === null || personalKeys.salt === null) 
+                    return null;
+                if (othersKeys.public === null || othersKeys.salt === null || othersKeys.private !== null)
+                    return null;
+
+                let sharedBits: ArrayBuffer = null;
+                try {
+                    let ecdhParams = {name:"ECDH", namedCurve:"P-521", public:othersKeys.public};
+                    sharedBits = await window.crypto.subtle.deriveBits(ecdhParams, personalKeys.private, ecdhCrypto.ECDH_SHARED_LENGTH);
+                } catch (ex) {
+                    return null;
+                }
+
+                let sharedArr = new Uint8Array(sharedBits);
+                if (sharedArr[0] === 0) {
+                    sharedArr = sharedArr.slice(1);
+                }
+            
+                let othersSaltArr = new Uint8Array(othersKeys.salt);
+                let personalSaltArr = new Uint8Array(personalKeys.salt);
+                let hmacSalt: Uint8Array = null;
+                let aesSalt: Uint8Array = null;
+
+                if (serverRole) {
+                    let personalHmacSalt = personalSaltArr.slice(0, Math.floor(personalSaltArr.length / 2));
+                    let personalAesSalt = personalSaltArr.slice(Math.floor(personalSaltArr.length / 2));
+                    let othersHmacSalt = othersSaltArr.slice(Math.floor(othersSaltArr.length / 2));
+                    let othersAesSalt = othersSaltArr.slice(0, Math.floor(othersSaltArr.length / 2));
+
+                    hmacSalt = new Uint8Array(personalHmacSalt.length + othersHmacSalt.length);
+                    aesSalt = new Uint8Array(othersAesSalt.length + personalAesSalt.length);
+                    hmacSalt.set(personalHmacSalt);
+                    hmacSalt.set(othersHmacSalt, personalHmacSalt.length);
+                    aesSalt.set(othersAesSalt);
+                    aesSalt.set(personalAesSalt, othersAesSalt.length);
+                } else {
+                    let personalAesSalt = personalSaltArr.slice(0, Math.floor(personalSaltArr.length / 2));
+                    let personalHmacSalt = personalSaltArr.slice(Math.floor(personalSaltArr.length / 2));
+                    let othersAesSalt = othersSaltArr.slice(Math.floor(othersSaltArr.length / 2));
+                    let othersHmacSalt = othersSaltArr.slice(0, Math.floor(othersSaltArr.length / 2));
+
+                    hmacSalt = new Uint8Array(personalHmacSalt.length + othersHmacSalt.length);
+                    aesSalt = new Uint8Array(othersAesSalt.length + personalAesSalt.length);
+                    hmacSalt.set(othersHmacSalt);
+                    hmacSalt.set(personalHmacSalt, othersHmacSalt.length);
+                    aesSalt.set(personalAesSalt);
+                    aesSalt.set(othersAesSalt, personalAesSalt.length);
+                }
+
+                let keys = await crypto.symmetric.deriveKeysFromBytes(sharedArr.buffer, aesSalt.buffer, hmacSalt.buffer, info);
+                return keys;
+            }
         }
 
-        static async marshallPublicKey (keys: AsymmetricKeyPair, info: ArrayBuffer): Promise<ArrayBuffer> {
-            let saltArr = new Uint8Array(keys.salt);
-            let publicArr = new Uint8Array(keys.public);
-            let infoArr = new Uint8Array(info);
-
-            let buffer = new Uint8Array(1 + saltArr.length + 1 + publicArr.length + infoArr.length);
-            buffer.set([saltArr.length]);
-            buffer.set(saltArr, 1);
-            buffer.set([publicArr.length], 1 + saltArr.length);
-            buffer.set(publicArr, 1 + saltArr.length + 1);
-            buffer.set(infoArr, 1 + saltArr.length + 1 + publicArr.length);
-
-            return buffer;
-        }
-
-        static async unmarshallPublicKey (data: ArrayBuffer): Promise<[AsymmetricKeyPair, ArrayBuffer]> {
-            if (data.byteLength <= 0) return null;
-
-            let dataArr = new Uint8Array(data);
-            let saltLength = dataArr[0];
-            if (dataArr.length <= 1 + saltLength) return null;
-
-            let salt = dataArr.slice(1, 1 + saltLength);
-            let publicLength = dataArr[1 + saltLength];
-            if (dataArr.length < 1 + saltLength + 1 + publicLength) return null;
-
-            let publicKey = dataArr.slice(1 + saltLength + 1, 1 + saltLength + 1 + publicLength);
-            let info = dataArr.slice(1 + saltLength + 1 + publicLength);
-
-            return [{private: null, public: publicKey, salt: salt}, info]
-        }
-
-        static async deriveSharedSymmetricKeys (personalKeys: AsymmetricKeyPair, othersKeys: AsymmetricKeyPair, info: ArrayBuffer, serverRole: boolean): Promise<SymmetricKeyPair> {
-            if (personalKeys.private === null || personalKeys.public === null || personalKeys.salt === null) 
-                return null;
-            if (othersKeys.public === null || othersKeys.salt === null || othersKeys.private !== null)
-                return null;
-
-            let rawOtherPublic: CryptoKey = null;
-            try {
-                let ecdhParams = {name:"ECDH", namedCurve:"P-521"};
-                rawOtherPublic = await window.crypto.subtle.importKey("raw", othersKeys.public, ecdhParams, false, ["deriveBits"])
-            } catch (ex) {
-                throw "-2"
-                return null;
+        static rsa = class rsaCrypto {
+            static async generateKeyPair (): Promise<AsymmetricKeyPair> {
+                let rawKeyPair: CryptoKeyPair = null;
+                try {
+                    let rsaPssParams = {name: "RSA-PSS", modulusLength: 4096, }
+                    rawKeyPair = await window.crypto.subtle.generateKey()
+                }
             }
 
-            let sharedBits: ArrayBuffer = null;
-            try {
-                let ecdhParams = {name:"ECDH", namedCurve:"P-521", public:rawOtherPublic};
-                sharedBits = await window.crypto.subtle.deriveBits(ecdhParams, personalKeys.private, asymmetricCrypto.ECDH_SHARED_LENGTH);
-            } catch (ex) {
-                throw "-1"
-                return null;
+            static async sign (keys: AsymmetricKeyPair, ): Promise<ArrayBuffer> {
+
             }
-
-            let sharedArr = new Uint8Array(sharedBits);
-            if (sharedArr[0] === 0) {
-                sharedArr = sharedArr.slice(1);
-            }
-        
-            let othersSaltArr = new Uint8Array(othersKeys.salt);
-            let personalSaltArr = new Uint8Array(personalKeys.salt);
-            let hmacSalt: Uint8Array = null;
-            let aesSalt: Uint8Array = null;
-
-            if (serverRole) {
-                let personalHmacSalt = personalSaltArr.slice(0, Math.floor(personalSaltArr.length / 2));
-                let personalAesSalt = personalSaltArr.slice(Math.floor(personalSaltArr.length / 2));
-                let othersHmacSalt = othersSaltArr.slice(Math.floor(othersSaltArr.length / 2));
-                let othersAesSalt = othersSaltArr.slice(0, Math.floor(othersSaltArr.length / 2));
-
-                hmacSalt = new Uint8Array(personalHmacSalt.length + othersHmacSalt.length);
-                aesSalt = new Uint8Array(othersAesSalt.length + personalAesSalt.length);
-                hmacSalt.set(personalHmacSalt);
-                hmacSalt.set(othersHmacSalt, personalHmacSalt.length);
-                aesSalt.set(othersAesSalt);
-                aesSalt.set(personalAesSalt, othersAesSalt.length);
-            } else {
-                let personalAesSalt = personalSaltArr.slice(0, Math.floor(personalSaltArr.length / 2));
-                let personalHmacSalt = personalSaltArr.slice(Math.floor(personalSaltArr.length / 2));
-                let othersAesSalt = othersSaltArr.slice(Math.floor(othersSaltArr.length / 2));
-                let othersHmacSalt = othersSaltArr.slice(0, Math.floor(othersSaltArr.length / 2));
-
-                hmacSalt = new Uint8Array(personalHmacSalt.length + othersHmacSalt.length);
-                aesSalt = new Uint8Array(othersAesSalt.length + personalAesSalt.length);
-                hmacSalt.set(othersHmacSalt);
-                hmacSalt.set(personalHmacSalt, othersHmacSalt.length);
-                aesSalt.set(personalAesSalt);
-                aesSalt.set(othersAesSalt, personalAesSalt.length);
-            }
-
-            let keys = await crypto.symmetric.deriveKeysFromBytes(sharedArr.buffer, aesSalt.buffer, hmacSalt.buffer, info);
-            return keys;
         }
     };
 }

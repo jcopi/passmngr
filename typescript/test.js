@@ -37,21 +37,21 @@ async function init() {
 	let dptbuffer = await utils.crypto.symmetric.decrypt(keypair, ctbuffer);
 	console.log("Plaintext:", utils.stringEncoding.fromUTF8(dptbuffer));
 
-	console.log("TESTING ASYMMETRIC ENCRYPTION");
+	console.log("TESTING ASYMMETRIC ECDH KEY EXCHANGE");
 
 	console.log("Generating ECC keys.");
-	let aliceKeys = await utils.crypto.asymmetric.generateKeyPair();
-	let bobKeys = await utils.crypto.asymmetric.generateKeyPair();
+	let aliceKeys = await utils.crypto.asymmetric.ecdh.generateKeyPair();
+	let bobKeys = await utils.crypto.asymmetric.ecdh.generateKeyPair();
 
 	console.log("Exchanging public keys and salts.");
-	let alicePublicMessage = await utils.crypto.asymmetric.marshallPublicKey(aliceKeys, new ArrayBuffer(0));
-	let bobPublicMessage = await utils.crypto.asymmetric.marshallPublicKey(bobKeys, new ArrayBuffer(0));
-	let [aliceKnowledgeOfBob, ax] = await utils.crypto.asymmetric.unmarshallPublicKey(bobPublicMessage);
-	let [bobKnowledgeOfAlice, bx] = await utils.crypto.asymmetric.unmarshallPublicKey(alicePublicMessage);
+	let alicePublicMessage = await utils.crypto.asymmetric.ecdh.marshallPublicKey(aliceKeys, new ArrayBuffer(0));
+	let bobPublicMessage = await utils.crypto.asymmetric.ecdh.marshallPublicKey(bobKeys, new ArrayBuffer(0));
+	let [aliceKnowledgeOfBob, ax] = await utils.crypto.asymmetric.ecdh.unmarshallPublicKey(bobPublicMessage);
+	let [bobKnowledgeOfAlice, bx] = await utils.crypto.asymmetric.ecdh.unmarshallPublicKey(alicePublicMessage);
 
 	console.log("Computing shared symmetric keys.");
-	let aliceComputedKeys = await utils.crypto.asymmetric.deriveSharedSymmetricKeys(aliceKeys, aliceKnowledgeOfBob, new ArrayBuffer(0), false);
-	let bobComputedKeys = await utils.crypto.asymmetric.deriveSharedSymmetricKeys(bobKeys, bobKnowledgeOfAlice, new ArrayBuffer(0), true);
+	let aliceComputedKeys = await utils.crypto.asymmetric.ecdh.deriveSharedSymmetricKeys(aliceKeys, aliceKnowledgeOfBob, new ArrayBuffer(0), false);
+	let bobComputedKeys = await utils.crypto.asymmetric.ecdh.deriveSharedSymmetricKeys(bobKeys, bobKnowledgeOfAlice, new ArrayBuffer(0), true);
 
 	let aliceSecretMessage = "abcdefghijklmnopqrstuvwxyz0123456789";
 	let bobSecretMessage = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
