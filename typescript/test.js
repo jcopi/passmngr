@@ -20,6 +20,11 @@ async function init() {
 		times.push(Date.now() - start);
 	}
 	console.log(times.map((v,i) => {return [list[i].length, v]}));*/
+	console.log("TESTING BER DECODE");
+	let ex1 = new Uint8Array([0x04, 0x05, 0x12, 0x34, 0x56, 0x78, 0x90]);
+	console.log(ex1, utils.berEncoding.fromBer(ex1.buffer));
+	let ex2 = new Uint8Array([0xdf, 0x82, 0x02, 0x05, 0x12, 0x34, 0x56, 0x78, 0x90]);
+	console.log(ex2, utils.berEncoding.fromBer(ex2.buffer));
 
 	console.log("TESTING SYMMETRIC ENCRYPTION")
 
@@ -57,7 +62,6 @@ async function init() {
 	let bobSecretMessage = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 	console.log("Alice encrypting message: " + aliceSecretMessage);
-	console.log(aliceComputedKeys);
 	let aliceEncryptedMessage = await utils.crypto.symmetric.encrypt(aliceComputedKeys, utils.stringEncoding.toUTF8(aliceSecretMessage));
 	let bobDecryptedMessage = await utils.crypto.symmetric.decrypt(bobComputedKeys, aliceEncryptedMessage);
 	console.log("Bob decrypted as: " + utils.stringEncoding.fromUTF8(bobDecryptedMessage));

@@ -60,6 +60,89 @@ export class bufferEncoding {
     }
 }
 
+export type BERObject = {
+    class: number;
+    tag: number;
+    structured: boolean;
+    contents: ArrayBuffer;
+    length: number;
+}
+
+export class berEncoding {
+    static fromBer (data: ArrayBuffer): BERObject[] {
+        let dataArr = new Uint8Array(data);
+        let result: BERObject[] = [];
+
+        let i = 0; // a buffer could contain many BER encoded objects
+        while (i < dataArr.length) {
+            // The first 2 bits of the first byte are an objects' class
+            let cls = (dataArr[i] & 0b11000000) >> 6;
+            // The 3rd bit indicated whether the data is structured
+            let structured = (dataArr[i] & 0b00100000) === 0b00100000;
+            // The next 5+ bytes represent the object's tag
+            let tag = (dataArr[i] & 0b00011111);
+            if (tag === 0b00011111) {
+                console.log(tag);
+                // If the first 5 tag bits are all 0 the tag is made up of the following bytes
+                // until a byte with a leading 0 is found. 
+                tag = 0;
+                for (i++; i < dataArr.length && (dataArr[i] & 0b10000000) !== 0x00; i++) {
+                    tag *= 128;
+                    tag += Number(dataArr[i] & 0b01111111);
+                }
+                if (i >= dataArr.length) throw "Invalid BER format not enough bytes";
+                if (!Number.isSafeInteger(tag)) throw "Tag too large";
+            } else {
+                i++;
+            }
+
+            let length = dataArr[i];
+            if (length === 0b10000000) {
+                // The length is unknown, so it must be found while parsing the contents
+                // it will be set to '-1' here and dealt with later
+                length = -1;
+                i++;
+            } else if (length > 128) {
+                let lenBytes = length - 128;
+                length = 0;
+                for (i++; i < dataArr.length && lenBytes-- > 0; i++) {
+                    length *= 256;
+                    length += dataArr[i];
+                }
+                if (i >= dataArr.length) throw "Invalid BER format not enough bytes";
+                if (!Number.isSafeInteger(length)) throw "Length too large"; 
+            } else {
+                i++;
+            }
+
+            let content: Uint8Array = null;
+            if (length <= 0) {
+                // Content will end at the first set of adjacent 0 bytes, length is unknown.
+                let cnt = [];
+                while (i + 1 < dataArr.length) {
+                    if (dataArr[i] === 0 && dataArr[i + 1] === 0) {
+                        i += 2;
+                        break;
+                    } else {
+                        cnt.push(dataArr[i]);
+                        i++;
+                    }
+                }
+                content = new Uint8Array(cnt);
+                length = content.length;
+            } else {
+                content = dataArr.slice(i, i + length);
+                i += length;
+            }
+
+            let item: BERObject = {class: cls, tag: tag, structured: structured, contents: content, length: length};
+            result.push(item);
+        }
+
+        return result;
+    }
+}
+
 export class stringEncoding {
     static toUTF8  (str: string): ArrayBuffer {
         let tmp = [];
@@ -490,11 +573,25 @@ export class crypto {
         }
 
         static async sign (keys: SymmetricKeyPair, data: ArrayBuffer): Promise<ArrayBuffer> {
-
+            let signature: ArrayBuffer = null;
+            try {
+                signature = await window.crypto.subtle.sign("HMAC", keys.hmac, data);
+            } catch (ex) {
+                return null;
+            }
+            
+            return signature;
         }
 
         static async verify (keys: SymmetricKeyPair, data: ArrayBuffer, signature: ArrayBuffer): Promise<boolean> {
+            let verified: boolean = false;
+            try {
+                verified = await window.crypto.subtle.verify("HMAC", keys.hmac, signature, data);
+            } catch (ex) {
+                return false;
+            }
 
+            return verified;
         }
     };
 
@@ -621,16 +718,43 @@ export class crypto {
         }
 
         static rsa = class rsaCrypto {
+            static RSA_SIGNATURE_HASH: string = "SHA-512";
+            static RSA_SALT_BYTE_CNT: number = 64;
+
             static async generateKeyPair (): Promise<AsymmetricKeyPair> {
                 let rawKeyPair: CryptoKeyPair = null;
                 try {
-                    let rsaPssParams = {name: "RSA-PSS", modulusLength: 4096, }
-                    rawKeyPair = await window.crypto.subtle.generateKey()
+                    let rsaPssParams = {name: "RSA-PSS", modulusLength: 4096, publicExponent: new Uint8Array([1,0,1]), hash: rsaCrypto.RSA_SIGNATURE_HASH};
+                    rawKeyPair = await window.crypto.subtle.generateKey(rsaPssParams, false, ["sign", "verify"]);
+                } catch (ex) {
+                    return null;
                 }
+
+                return {public: rawKeyPair.publicKey, private: rawKeyPair.privateKey, salt: null};
             }
 
-            static async sign (keys: AsymmetricKeyPair, ): Promise<ArrayBuffer> {
+            static async sign (keys: AsymmetricKeyPair, data: ArrayBuffer): Promise<ArrayBuffer> {
+                let signature: ArrayBuffer = null;
+                try {
+                    let rsaPssParams = {name: "RSA-PSS", saltLength: rsaCrypto.RSA_SALT_BYTE_CNT};
+                    signature = await window.crypto.subtle.sign(rsaPssParams, keys.private, data);
+                } catch (ex) {
+                    return null;
+                }
 
+                return signature;
+            }
+
+            static async verify (keys: AsymmetricKeyPair, data: ArrayBuffer, signature: ArrayBuffer): Promise<boolean> {
+                let verified: boolean = false;
+                try {
+                    let rsaPssParams = {name: "RSA-PSS", saltLength: rsaCrypto.RSA_SALT_BYTE_CNT};
+                    verified = await window.crypto.subtle.verify(rsaPssParams, keys.public, signature, data);
+                } catch (ex) {
+                    return false;
+                }
+
+                return verified;
             }
         }
     };
