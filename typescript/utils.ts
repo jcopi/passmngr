@@ -41,12 +41,12 @@ export class bufferEncoding {
             throw "Invalid padding on base64 string";
         let lastChunkBCnt = (b64.endsWith("=") ? (b64.endsWith("==") ? 1 : 2) : 0);
         let mainlen = b64.length - (lastChunkBCnt === 0 ? 0 : 4);
-        let nbytes = (mainlen / 4) + lastChunkBCnt;
+        let nbytes = ((mainlen / 4) * 3) + lastChunkBCnt;
         let bytes = new Uint8Array(nbytes);
 
         let j = 0;
         for (let i = 0; i < mainlen; i += 4) {
-            let word = (encodings[b64[i]] << 18) | (encodings[b64[i]] << 12) | (encodings[b64[i]] << 6) | encodings[b64[i]];
+            let word = (encodings[b64[i]] << 18) | (encodings[b64[i+1]] << 12) | (encodings[b64[i+2]] << 6) | encodings[b64[i+3]];
             bytes[j++] = (word & 0b111111110000000000000000) >> 16;
             bytes[j++] = (word & 0b000000001111111100000000) >> 8;
             bytes[j++] = (word & 0b000000000000000011111111);
@@ -68,12 +68,45 @@ export class bufferEncoding {
 export type BERObject = {
     class: number;
     tag: number;
+    tagName: string;
     structured: boolean;
-    contents: ArrayBuffer;
+    rawContents: ArrayBuffer;
+    contents: BERObject[];
     length: number;
 }
 
 export class berEncoding {
+    static TAG_BOOLEAN             : number = 1;
+    static TAG_INTEGER             : number = 2;
+    static TAG_BIT_STRING          : number = 3;
+    static TAG_OCTET_STRING        : number = 4;
+    static TAG_NULL                : number = 5;
+    static TAG_OBJECT_IDENTIFIER   : number = 6;
+    static TAG_OBJECT_DESCRIPTOR   : number = 7;
+    static TAG_INSTANCE_OF_EXTERNAL: number = 8;
+    static TAG_REAL                : number = 9;
+    static TAG_ENUMERATED          : number = 10;
+    static TAG_EMBEDDED_PDV        : number = 11;
+    static TAG_UTF8_STRING         : number = 12;
+    static TAG_RELATIVE_OID        : number = 13;
+    static TAG_SEQUENCE_OF         : number = 16;
+    static TAG_SET_OF              : number = 17;
+    static TAG_NUMERIC_STRING      : number = 18;
+    static TAG_PRINTABLE_STRING    : number = 19;
+    static TAG_T61_STRING          : number = 20;
+    static TAG_VIDEOTEX_STRING     : number = 21;
+    static TAG_IA5_STRING          : number = 22;
+    static TAG_UTC_TIME            : number = 23;
+    static TAG_GENERALIZED_TIME    : number = 24;
+    static TAG_GRAPHIC_STRING      : number = 25;
+    static TAG_ISO646_STRING       : number = 26;
+    static TAG_GENERAL_STRING      : number = 27;
+    static TAG_UNIVERSAL_STRING    : number = 28;
+    static TAG_CHARACTER_STRING    : number = 29;
+    static TAG_BMP_STRING          : number = 30;
+
+    static TAG_NAMES = {1: "BOOLEAN",2: "INTEGER",3: "BIT_STRING",4: "OCTET_STRING",5: "NULL",6: "OBJECT_IDENTIFIER",7: "OBJECT_DESCRIPTOR",8: "_INSTANCE_OF_EXTERNAL",9: "_REAL",10: "_ENUMERATED",11: "_EMBEDDED_PDV",12: "_UTF8_STRING",13: "_RELATIVE_OID",16: "_SEQUENCE_OF",17: "_SET_OF",18: "_NUMERIC_STRING",19: "_PRINTABLE_STRING",20: "_T61_STRING",21: "_VIDEOTEX_STRING",22: "_IA5_STRING",23: "_UTC_TIME",24: "_GENERALIZED_TIME",25: "_GRAPHIC_STRING",26: "_ISO646_STRING",27: "_GENERAL_STRING",28: "UNIVERSAL_STRING",29: "CHARACTER_STRING",30: "BMP_STRING"}
+
     static fromBer (data: ArrayBuffer): BERObject[] {
         let dataArr = new Uint8Array(data);
         let result: BERObject[] = [];
@@ -87,7 +120,6 @@ export class berEncoding {
             // The next 5+ bytes represent the object's tag
             let tag = (dataArr[i] & 0b00011111);
             if (tag === 0b00011111) {
-                console.log(tag);
                 // If the first 5 tag bits are all 1 the tag is made up of the following bytes
                 // until a byte with a leading 0 is found. 
                 tag = 0;
@@ -112,12 +144,11 @@ export class berEncoding {
                 length = -1;
                 i++;
             } else if (length > 128) {
-                let lenBytes = (length & 0b01111111) - 128;
+                let lenBytes = (length & 0b01111111);
                 length = 0;
                 for (i++; i < dataArr.length && lenBytes-- > 0; i++) {
                     length *= 256;
                     length += dataArr[i];
-                    console.log(lenBytes);
                 }
                 if (i >= dataArr.length) throw "Invalid BER format not enough bytes";
                 if (!Number.isSafeInteger(length)) throw "Length too large"; 
@@ -125,7 +156,7 @@ export class berEncoding {
                 i++;
             }
 
-            let content: Uint8Array = null;
+            let raw: Uint8Array = null;
             if (length <= 0) {
                 // Content will end at the first set of adjacent 0 bytes, length is unknown.
                 let cnt = [];
@@ -138,16 +169,23 @@ export class berEncoding {
                         i++;
                     }
                 }
-                content = new Uint8Array(cnt);
-                length = content.length;
+                raw = new Uint8Array(cnt);
+                length = raw.length;
             } else {
-                content = dataArr.slice(i, i + length);
+                raw = dataArr.slice(i, i + length);
                 i += length;
             }
 
-            let item: BERObject = {class: cls, tag: tag, structured: structured, contents: content, length: length};
+            let content = null;
+            if (structured) {
+                content = berEncoding.fromBer(raw);
+            }
+
+            let item: BERObject = {class: cls, tag: tag, tagName:(tag in berEncoding.TAG_NAMES ? berEncoding.TAG_NAMES[tag] : "TAG_UNKNOWN"), structured: structured, rawContents: raw, contents: content, length: length};
             result.push(item);
         }
+
+
 
         return result;
     }
