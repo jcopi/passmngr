@@ -2,6 +2,7 @@ export class bufferEncoding {
     static toBase64 (buffer: ArrayBuffer): string {
         let result = "";
         let encoding = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let padding  = "=";
 
         let bytes = new Uint8Array(buffer);
         let remainder = buffer.byteLength % 3;
@@ -16,13 +17,16 @@ export class bufferEncoding {
         }
         if (remainder == 2) {
             let word = (bytes[mainlen] << 8) | bytes[mainlen+1];
-            result += encoding[(word & 0b1111100000000000) >> 11];
-            result += encoding[(word & 0b0000011111100000) >>  5];
-            result += encoding[(word & 0b0000000000011111)];
+            result += encoding[(word & 0b1111110000000000) >> 10];
+            result += encoding[(word & 0b0000001111110000) >>  4];
+            result += encoding[(word & 0b0000000000001111) <<  2];
+            result += padding;
         } else if (remainder == 1) {
             let word = bytes[mainlen];
-            result += encoding[(word & 0b11110000) >> 4];
-            result += encoding[(word & 0b00001111)];
+            result += encoding[(word & 0b11111100) >> 2];
+            result += encoding[(word & 0b00000011) << 4];
+            result += padding;
+            result += padding;
         }
 
         return result;
@@ -33,10 +37,11 @@ export class bufferEncoding {
         "p":41,"q":42,"r":43,"s":44,"t":45,"u":46,"v":47,"w":48,"x":49,"y":50,"z":51,"+":62,"/":63};
     
         let remainder = b64.length % 4;
-        if (remainder != 2 && remainder != 3)
+        if (remainder > 0)
             throw "Invalid padding on base64 string";
-        let mainlen = b64.length - remainder;
-        let nbytes = ((mainlen / 4) * 3) + (remainder - 1);
+        let lastChunkBCnt = (b64.endsWith("=") ? (b64.endsWith("==") ? 1 : 2) : 0);
+        let mainlen = b64.length - (lastChunkBCnt === 0 ? 0 : 4);
+        let nbytes = (mainlen / 4) + lastChunkBCnt;
         let bytes = new Uint8Array(nbytes);
 
         let j = 0;
@@ -47,11 +52,11 @@ export class bufferEncoding {
             bytes[j++] = (word & 0b000000000000000011111111);
         }
 
-        if (remainder == 2) {
-            let word = (encodings[b64[mainlen]] << 4) | encodings[b64[mainlen+1]];
+        if (lastChunkBCnt === 1) {
+            let word = (encodings[b64[mainlen]] << 2) | (encodings[b64[mainlen+1]] >> 4);
             bytes[j++] = word;
-        } else if (remainder == 3) {
-            let word = (encodings[b64[mainlen]] << 11) | (encodings[b64[mainlen+1]] << 5) | encodings[b64[mainlen+1]];
+        } else if (lastChunkBCnt === 2) {
+            let word = (encodings[b64[mainlen]] << 10) | (encodings[b64[mainlen+1]] << 4) | (encodings[b64[mainlen+2]] >>2);
             bytes[j++] = (word & 0b1111111100000000) >> 8;
             bytes[j++] = (word & 0b0000000011111111);
         }
@@ -83,12 +88,16 @@ export class berEncoding {
             let tag = (dataArr[i] & 0b00011111);
             if (tag === 0b00011111) {
                 console.log(tag);
-                // If the first 5 tag bits are all 0 the tag is made up of the following bytes
+                // If the first 5 tag bits are all 1 the tag is made up of the following bytes
                 // until a byte with a leading 0 is found. 
                 tag = 0;
-                for (i++; i < dataArr.length && (dataArr[i] & 0b10000000) !== 0x00; i++) {
+                for (i++; i < dataArr.length; i++) {
                     tag *= 128;
                     tag += Number(dataArr[i] & 0b01111111);
+                    if ((dataArr[i] & 0b10000000) !== 0b10000000) {
+                        i++;
+                        break;
+                    }
                 }
                 if (i >= dataArr.length) throw "Invalid BER format not enough bytes";
                 if (!Number.isSafeInteger(tag)) throw "Tag too large";
@@ -103,11 +112,12 @@ export class berEncoding {
                 length = -1;
                 i++;
             } else if (length > 128) {
-                let lenBytes = length - 128;
+                let lenBytes = (length & 0b01111111) - 128;
                 length = 0;
                 for (i++; i < dataArr.length && lenBytes-- > 0; i++) {
                     length *= 256;
                     length += dataArr[i];
+                    console.log(lenBytes);
                 }
                 if (i >= dataArr.length) throw "Invalid BER format not enough bytes";
                 if (!Number.isSafeInteger(length)) throw "Length too large"; 
