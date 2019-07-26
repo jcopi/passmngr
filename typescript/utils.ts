@@ -807,3 +807,521 @@ export class crypto {
         }
     };
 }
+
+export namespace passmngr {
+    enum calg {
+        AES    = 0b00000001,
+        CBC    = 0b00000010,
+        GCM    = 0b00000100,
+        CTR    = 0b00001000,
+        HMAC   = 0b00010000,
+        SHA256 = 0b00100000,
+        SHA384 = 0b01000000,
+        SHA512 = 0b10000000,
+
+        ECDSA  = 0b00000001 << 8,
+        P384   = 0b00000010 << 8,
+        P521   = 0b00000100 << 8,
+        ECDHE  = 0b00001000 << 8
+    }
+
+    enum cryptoAlgos {
+        AES_CBC_256_HMAC_SHA256 = calg.AES | calg.CBC | calg.HMAC | calg.SHA256,
+        AES_CBC_256_HMAC_SHA384 = calg.AES | calg.CBC | calg.HMAC | calg.SHA384,
+        AES_CBC_256_HMAC_SHA512 = calg.AES | calg.CBC | calg.HMAC | calg.SHA512,
+        AES_GCM_256_HMAC_SHA256 = calg.AES | calg.GCM | calg.HMAC | calg.SHA256,
+        AES_GCM_256_HMAC_SHA384 = calg.AES | calg.GCM | calg.HMAC | calg.SHA384,
+        AES_GCM_256_HMAC_SHA512 = calg.AES | calg.GCM | calg.HMAC | calg.SHA512,
+        ECDHE_P521 = calg.ECDHE | calg.P384,
+        ECDHE_P384 = calg.ECDHE | calg.P384,
+        ECDSA_P521_SHA256 = calg.ECDSA | calg.P521 | calg.SHA256,
+        ECDSA_P521_SHA384 = calg.ECDSA | calg.P521 | calg.SHA384,
+        ECDSA_P521_SHA512 = calg.ECDSA | calg.P521 | calg.SHA512,
+        ECDSA_P384_SHA256 = calg.ECDSA | calg.P384 | calg.SHA256,
+        ECDSA_P384_SHA384 = calg.ECDSA | calg.P384 | calg.SHA384,
+        ECDSA_P384_SHA512 = calg.ECDSA | calg.P384 | calg.SHA512
+    }
+
+    type cryptoSymKeySet = {
+        algo: cryptoAlgos;
+        sym: {
+            encrypt: CryptoKey;
+            sign: CryptoKey;
+        };
+        salt: ArrayBuffer;
+    }
+
+    type cryptoAsymKeySet = {
+        algo: cryptoAlgos;
+        asym: {
+            public: CryptoKey;
+            private: CryptoKey;
+        };
+        salt: ArrayBuffer;
+    }
+
+    type cryptoKeySet = cryptoSymKeySet | cryptoAsymKeySet;
+
+    function isSymmetric(keySet: cryptoKeySet): keySet is cryptoSymKeySet {
+        return (keySet as cryptoSymKeySet).sym !== undefined;
+    }
+
+    class crypto {
+
+        static primitives = class cryptoPrimitives {
+            static randomBytes (count: number): ArrayBuffer {
+                let buffer = new Uint8Array(count);
+                try {
+                    window.crypto.getRandomValues(buffer);
+                } catch (ex) {
+                    return null;
+                }
+                return buffer;
+            }
+
+            static randomBits (count: number): ArrayBuffer {
+                return this.randomBytes(Math.ceil(count / 8));
+            }
+
+            static smallPrimes: Uint32Array = new Uint32Array([2,3,5,7,11,13,17,19,23,29]);
+            static primeIndices: Uint32Array = new Uint32Array([1,7,11,13,17,19,23,29]);
+            static isPrime (y: number): boolean {
+                let u32 = new Uint32Array(4);
+                u32[2] = y;
+
+                // Check all of the small primes
+                for (let i = 0; i < algos.smallPrimes.length; ++i) {
+                    u32[1] = algos.smallPrimes[i];
+                    u32[0] = u32[2] / u32[1];
+                    if (u32[0] < u32[1]) return true;
+                    if (u32[2] == u32[0] * u32[1]) return false;
+                }
+                
+                for (u32[3] = 31; true;) {
+                    u32[0] = u32[2] / u32[3];
+                    if (u32[0] < u32[3]) return true;
+                    if (u32[2] == u32[0] * u32[3]) return false;
+                    u32[3] += 6;
+
+                    u32[0] = u32[2] / u32[3];
+                    if (u32[0] < u32[3]) return true;
+                    if (u32[2] == u32[0] * u32[3]) return false;
+                    u32[3] += 4;
+
+                    u32[0] = u32[2] / u32[3];
+                    if (u32[0] < u32[3]) return true;
+                    if (u32[2] == u32[0] * u32[3]) return false;
+                    u32[3] += 2;
+
+                    u32[0] = u32[2] / u32[3];
+                    if (u32[0] < u32[3]) return true;
+                    if (u32[2] == u32[0] * u32[3]) return false;
+                    u32[3] += 4;
+
+                    u32[0] = u32[2] / u32[3];
+                    if (u32[0] < u32[3]) return true;
+                    if (u32[2] == u32[0] * u32[3]) return false;
+                    u32[3] += 2;
+
+                    u32[0] = u32[2] / u32[3];
+                    if (u32[0] < u32[3]) return true;
+                    if (u32[2] == u32[0] * u32[3]) return false;
+                    u32[3] += 4;
+
+                    u32[0] = u32[2] / u32[3];
+                    if (u32[0] < u32[3]) return true;
+                    if (u32[2] == u32[0] * u32[3]) return false;
+                    u32[3] += 6;
+
+                    u32[0] = u32[2] / u32[3];
+                    if (u32[0] < u32[3]) return true;
+                    if (u32[2] == u32[0] * u32[3]) return false;
+                    u32[3] += 2;
+                }
+
+                return true;
+            }
+
+            static lowerBound (list: ArrayLike<any>, value: any): number {
+                let l = 0;
+                let h = list.length;
+                while (l < h) {
+                    let mid = ((l + h) | 0) >> 1;
+                    if (value <= list[mid]) {
+                        h = mid;
+                    } else {
+                        l = mid + 1;
+                    }
+                }
+                return l;
+            }
+        
+            static nextPrime (n: number): number {
+                const small_primes = algos.smallPrimes;
+                const indices = algos.primeIndices;
+        
+                const L = 30;
+                const N = algos.smallPrimes.length;
+                // If n is small enough, search in small_primes
+                if (n <= algos.smallPrimes[N-1]) {
+                    return algos.smallPrimes[algos.lowerBound(algos.smallPrimes, n)];
+                }
+                // Else n > largest small_primes
+                // Start searching list of potential primes: L * k0 + indices[in]
+                const M = algos.primeIndices.length;
+                // Select first potential prime >= n
+                //   Known a-priori n >= L
+                let k0 = (n / L) | 0; // Coerce to Uint32
+                let inn = algos.lowerBound(algos.primeIndices, n - k0 * L);
+                n = L * k0 + algos.primeIndices[inn];
+                while (!algos.isPrime(n))
+                {
+                    if (++inn == M)
+                    {
+                        ++k0;
+                        inn = 0;
+                    }
+                    n = L * k0 + algos.primeIndices[inn];
+                }
+                return n;
+            }
+        }
+
+        static symmetric = class symmetricCrypto {
+            static aesCbcIvBitLength: number = 128;
+            static aesGcmNonceBitLength: number = 96;
+            static aesCbcIvByteLength: number = 16;
+            static aesGcmNonceByteLength: number = 12;
+            static aesGcmTagBitLength: number = 128;
+            static sha256ByteLength: number = 32;
+            static sha384ByteLength: number = 48;
+            static sha512ByteLength: number = 64;
+
+            static async encrypt (keys: cryptoKeySet, data: ArrayBuffer, iv?: ArrayBuffer): Promise<ArrayBuffer> {
+                if (!isSymmetric(keys)) {
+                    return null;
+                }
+                
+                let cipherText: ArrayBuffer = null;
+                let aesParams: AesCbcParams | AesGcmParams = null;
+
+                if (keys.algo & calg.CBC) {
+                    // CBC mode will require the addition of an HMAC signature
+                    if (iv === undefined) {
+                        iv = crypto.primitives.randomBits(symmetricCrypto.aesCbcIvBitLength);
+                        if (iv === null) {
+                            return null;
+                        }
+                    }
+
+                    
+                    aesParams = {name: "AES-CBC", iv:iv};
+                } else if (keys.algo & calg.GCM) {
+                    if (iv === undefined) {
+                        iv = crypto.primitives.randomBits(symmetricCrypto.aesGcmNonceBitLength);
+                        if (iv === null) {
+                            return null;
+                        }
+                    }
+
+                    aesParams = {name: "AES-GCM", iv: iv, tagLength: symmetricCrypto.aesGcmTagBitLength};
+                }
+                try {
+                    cipherText = await window.crypto.subtle.encrypt(aesParams, keys.sym.encrypt, data);
+                } catch (ex) {
+                    return null;
+                }
+
+                let combined = new Uint8Array(iv.byteLength + cipherText.byteLength);
+                combined.set(new Uint8Array(iv));
+                combined.set(new Uint8Array(cipherText), iv.byteLength);
+
+                let signature = await symmetricCrypto.sign(keys, combined.buffer);
+                if (signature === null) {
+                    return null;
+                }
+
+                let result = new Uint8Array(signature.byteLength + combined.length);
+                result.set(new Uint8Array(signature));
+                result.set(combined, signature.byteLength);
+
+                return result;
+            }
+
+            static async decrypt (keys: cryptoKeySet, data: ArrayBuffer): Promise<ArrayBuffer> {
+                if (!isSymmetric(keys)) {
+                    return null;
+                }
+
+                let signature: ArrayBuffer = null;
+                let iv: ArrayBuffer = null;
+                let cipherText: ArrayBuffer = null;
+
+                let aesParams: AesCbcParams | AesGcmParams = null;
+
+                if (keys.algo & calg.SHA256) {
+                    signature = data.slice(0, symmetricCrypto.sha256ByteLength);
+                } else if (keys.algo & calg.SHA384) {
+                    signature = data.slice(0, symmetricCrypto.sha384ByteLength);
+                } else if (keys.algo & calg.SHA512) {
+                    signature = data.slice(0, symmetricCrypto.sha512ByteLength);
+                } else {
+                    return null;
+                }
+
+                if (keys.algo & calg.CBC) {
+                    iv = data.slice(signature.byteLength, signature.byteLength + symmetricCrypto.aesCbcIvByteLength);
+                    aesParams = {name: "AES-CBC", iv: iv};
+                } else if (keys.algo & calg.GCM) {
+                    iv = data.slice(signature.byteLength, signature.byteLength + symmetricCrypto.aesGcmNonceByteLength);
+                    aesParams = {name: "AES-GCM", iv: iv, tagLength: symmetricCrypto.aesGcmTagBitLength};
+                } else {
+                    return null;
+                }
+
+                cipherText = data.slice(signature.byteLength + iv.byteLength);
+                let combined = new Uint8Array(iv.byteLength + cipherText.byteLength);
+                combined.set(new Uint8Array(iv));
+                combined.set(new Uint8Array(cipherText), iv.byteLength);
+
+                if (await symmetricCrypto.verify(keys, signature, combined.buffer) !== true) {
+                    return null;
+                }
+
+                let plainText: ArrayBuffer = null;
+                try {
+                    plainText = await window.crypto.subtle.decrypt(aesParams, keys.sym.encrypt, cipherText);
+                } catch (ex) {
+                    return null;
+                }
+
+                return plainText;
+            }
+
+            static async sign (keys: cryptoKeySet, data: ArrayBuffer): Promise<ArrayBuffer> {
+                if (!isSymmetric(keys)) {
+                    return null;
+                }
+                
+                let signature: ArrayBuffer = null;
+                try {
+                    signature = await window.crypto.subtle.sign("HMAC", keys.sym.sign, data);
+                } catch (ex) {
+                    return null;
+                }
+
+                return signature;
+            }
+
+            static async verify (keys: cryptoKeySet, signature: ArrayBuffer, data: ArrayBuffer): Promise<boolean> {
+                if (!isSymmetric(keys)) {
+                    return null;
+                }
+
+                let verified: boolean = false;
+                try {
+                    verified = await window.crypto.subtle.verify("HMAC", keys.sym.sign, signature, data);
+                } catch (ex) {
+                    return false;
+                }
+
+                return verified;
+            }
+        };
+
+        static asymmetric = class asymmetricCrypto {
+            static async sign (keys: cryptoKeySet, data: ArrayBuffer): Promise<ArrayBuffer> {
+                if (isSymmetric(keys)) {
+                    return null;
+                }
+
+                let ecdsaParams: EcdsaParams = null;
+                if (keys.algo & calg.SHA256) {
+                    ecdsaParams = {name: "ECDSA", hash: "SHA-256"};
+                } else if (keys.algo & calg.SHA384) {
+                    ecdsaParams = {name: "ECDSA", hash: "SHA-384"};
+                } else if (keys.algo & calg.SHA512) {
+                    ecdsaParams = {name: "ECDSA", hash: "SHA-512"};
+                }
+
+                let signature: ArrayBuffer = null;
+                try {
+                    signature = await window.crypto.subtle.sign(ecdsaParams, keys.asym.private, data);
+                } catch (ex) {
+                    return null;
+                }
+
+                return signature;
+            }
+
+            static async verify (keys: cryptoKeySet, signature: ArrayBuffer, data: ArrayBuffer): Promise<boolean> {
+                if (isSymmetric(keys)) {
+                    return null;
+                }
+
+                let ecdsaParams: EcdsaParams = null;
+                if (keys.algo & calg.SHA256) {
+                    ecdsaParams = {name: "ECDSA", hash: "SHA-256"};
+                } else if (keys.algo & calg.SHA384) {
+                    ecdsaParams = {name: "ECDSA", hash: "SHA-384"};
+                } else if (keys.algo & calg.SHA512) {
+                    ecdsaParams = {name: "ECDSA", hash: "SHA-512"};
+                }
+
+                let verified: boolean = false;
+                try {
+                    verified = await window.crypto.subtle.verify(ecdsaParams, keys.asym.public, signature, data);
+                } catch (ex) {
+                    return false;
+                }
+
+                return verified;
+            }
+
+            static async keyExchangeMarshshallPublic (keys: cryptoKeySet): Promise<ArrayBuffer> {
+
+            }
+
+            static async keyExchangeUnmarshallPublic (data: ArrayBuffer): Promise<cryptoKeySet> {
+
+            }
+
+            static async keyExchangeDeriveSecretBits (selfKeys: cryptoKeySet, otherKeys: cryptoKeySet): Promise<ArrayBuffer> {
+                
+            }
+        };
+
+        static keygen = class keygenCrypto {
+            static defaultPBKDF2Iterations: number = crypto.primitives.nextPrime(4194368);
+            static defaultPBKDF2Hash: string = "SHA-512";
+            static defaultHKDFHash: string = "SHA-256";
+            static defaultAESLength: number = 256;
+            static defaultSymBitLength: number = 512;
+            static defaultEcdhSaltBitLength: number = 256;
+
+            static async fromBits (algo: cryptoAlgos, bits: ArrayBuffer, salt: ArrayBuffer): Promise<cryptoKeySet> {
+                if ((algo & calg.AES) && (algo & calg.HMAC)) {
+                    // Symmetric encryption
+                    let aesParams: AesKeyGenParams = null
+                    if (algo & calg.CBC) {
+                        aesParams = {name: "AES-CBC", length: keygenCrypto.defaultAESLength};
+                    } else if (algo & calg.GCM) {
+                        aesParams = {name: "AES-GCM", length: keygenCrypto.defaultAESLength};
+                    } else {
+                        return null;
+                    }
+
+                    let hmacParams: HmacKeyGenParams = null;
+                    if (algo & calg.SHA256) {
+                        hmacParams = {name: "HMAC", hash: "SHA-256"};
+                    } else if (algo & calg.SHA384) {
+                        hmacParams = {name: "HMAC", hash: "SHA-384"};
+                    } else if (algo & calg.SHA512) {
+                        hmacParams = {name: "HMAC", hash: "SHA-512"};
+                    } else {
+                        return null;
+                    }
+
+                    let saltArray = new Uint8Array(salt)
+                    let aesSalt = saltArray.slice(0, saltArray.length >> 1);
+                    let hmacSalt = saltArray.slice(saltArray.length >> 1);
+
+                    let bitsArray = new Uint8Array(bits);
+                    let aesBits = bitsArray.slice(0, bitsArray.length >> 1);
+                    let hmacBits = bitsArray.slice(bitsArray.length >> 1);
+
+                    let aesKey: CryptoKey = null;
+                    let hmacKey: CryptoKey = null;
+
+                    try {
+                        let aesHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: aesSalt, hash: keygenCrypto.defaultHKDFHash};
+                        let hmacHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: hmacSalt, hash: keygenCrypto.defaultHKDFHash};
+
+                        let aesRawKg =  window.crypto.subtle.importKey("raw", aesBits, "HKDF", false, ["deriveKey"]);
+                        let hmacRawKg =  window.crypto.subtle.importKey("raw", hmacBits, "HKDF", false, ["deriveKey"]);
+                        let aesRaw = await aesRawKg;
+                        let hmacRaw = await hmacRawKg;
+
+                        let aesKg = window.crypto.subtle.deriveKey(aesHkdfParams as any, aesRaw, aesParams, false, ["encrypt", "decrypt"]);
+                        let hmacKg = window.crypto.subtle.deriveKey(hmacHkdfParams as any, hmacRaw, hmacParams, false, ["sign", "verify"]);
+                        aesKey = await aesKg;
+                        hmacKey = await hmacKg;
+                    } catch (ex) {
+                        return null;
+                    }
+
+                    return {algo: algo, sym: {encrypt: aesKey, sign: hmacKey}, salt: null};
+                } else {
+                    return null;
+                }
+            }
+
+            static async fromPassword (password: string, algo: cryptoAlgos, salt: ArrayBuffer, iteration: number = keygenCrypto.defaultPBKDF2Iterations): Promise<cryptoKeySet> {
+                let rawKey: CryptoKey = null;
+                let keyBits: ArrayBuffer = null;
+                try {
+                    rawKey = await window.crypto.subtle.importKey("raw", stringEncoding.toUTF8(password), "PBKDF2", false, ["deriveBits"]);
+                    let pbkdf2Params = {name: "PBKDF2", iterations: this.defaultPBKDF2Iterations, salt: salt, hash: keygenCrypto.defaultPBKDF2Hash};
+                    keyBits = await window.crypto.subtle.deriveBits(pbkdf2Params, rawKey, keygenCrypto.defaultSymBitLength)
+                } catch (ex) {
+                    keyBits = null;
+                    return null;
+                }
+                
+                return await keygenCrypto.fromBits(algo, keyBits, salt);
+            }
+
+            static async fromRandom (algo: cryptoAlgos): Promise<cryptoKeySet> {
+                if (algo & calg.AES) {
+                    let keyBits = crypto.primitives.randomBits(keygenCrypto.defaultSymBitLength);
+                    let salt = crypto.primitives.randomBits(keygenCrypto.defaultSymBitLength);
+
+                    return await keygenCrypto.fromBits(algo, keyBits, salt);
+                } else if (algo & calg.ECDHE) {
+                    let ecdhParams: EcKeyGenParams = null;
+                    if (algo & calg.P384) {
+                        ecdhParams = {name: "ECDH", namedCurve: "P-384"};
+                    } else if (algo & calg.P521) {
+                        ecdhParams = {name: "ECDH", namedCurve: "P-521"};
+                    } else {
+                        return null;
+                    }
+
+                    let rawKeyPair: CryptoKeyPair = null;
+                    try {
+                        rawKeyPair = await window.crypto.subtle.generateKey(ecdhParams, false, ["deriveKey", "deriveBits"])
+                    } catch (ex) {
+                        return null;
+                    }
+
+                    let salt = crypto.primitives.randomBits(keygenCrypto.defaultEcdhSaltBitLength);
+                    if (salt === null) {
+                        return null;
+                    }
+
+                    return {algo: algo, asym: {public: rawKeyPair.publicKey, private: rawKeyPair.privateKey}, salt: salt};
+                } else if (algo & calg.ECDSA) {
+                    let ecdsaParams: EcKeyGenParams = null;
+                    if (algo & calg.P384) {
+                        ecdsaParams = {name: "ECDSA", namedCurve: "P-384"};
+                    } else if (algo & calg.P521) {
+                        ecdsaParams = {name: "ECDSA", namedCurve: "P-521"};
+                    } else {
+                        return null;
+                    }
+
+                    let rawKeyPair: CryptoKeyPair = null;
+                    try {
+                        rawKeyPair = await window.crypto.subtle.generateKey(ecdsaParams, false, ["sign", "verify"])
+                    } catch (ex) {
+                        return null;
+                    }
+
+                    return {algo: algo, asym: {public: rawKeyPair.publicKey, private: rawKeyPair.privateKey}, salt: null};
+                } else {
+                    return null;
+                }
+            }
+        };
+    }
+}
