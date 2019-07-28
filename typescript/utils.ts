@@ -985,7 +985,140 @@ export namespace passmngr {
                 }
                 return n;
             }
-        }
+        };
+
+        static keygen = class keygenCrypto {
+            static defaultPBKDF2Iterations: number = crypto.primitives.nextPrime(4194368);
+            static defaultPBKDF2Hash: string = "SHA-512";
+            static defaultHKDFHash: string = "SHA-256";
+            static defaultAESLength: number = 256;
+            static defaultSymBitLength: number = 512;
+            static defaultEcdhSaltBitLength: number = 256;
+
+            static async fromBits (algo: cryptoAlgos, bits: ArrayBuffer, salt: ArrayBuffer): Promise<cryptoKeySet> {
+                if ((algo & calg.AES) && (algo & calg.HMAC)) {
+                    // Symmetric encryption
+                    let aesParams: AesKeyGenParams = null
+                    if (algo & calg.CBC) {
+                        aesParams = {name: "AES-CBC", length: keygenCrypto.defaultAESLength};
+                    } else if (algo & calg.GCM) {
+                        aesParams = {name: "AES-GCM", length: keygenCrypto.defaultAESLength};
+                    } else {
+                        return null;
+                    }
+
+                    let hmacParams: HmacKeyGenParams = null;
+                    if (algo & calg.SHA256) {
+                        hmacParams = {name: "HMAC", hash: "SHA-256"};
+                    } else if (algo & calg.SHA384) {
+                        hmacParams = {name: "HMAC", hash: "SHA-384"};
+                    } else if (algo & calg.SHA512) {
+                        hmacParams = {name: "HMAC", hash: "SHA-512"};
+                    } else {
+                        return null;
+                    }
+
+                    let saltArray = new Uint8Array(salt)
+                    let aesSalt = saltArray.slice(0, saltArray.length >> 1);
+                    let hmacSalt = saltArray.slice(saltArray.length >> 1);
+
+                    let bitsArray = new Uint8Array(bits);
+                    let aesBits = bitsArray.slice(0, bitsArray.length >> 1);
+                    let hmacBits = bitsArray.slice(bitsArray.length >> 1);
+
+                    let aesKey: CryptoKey = null;
+                    let hmacKey: CryptoKey = null;
+
+                    try {
+                        let aesHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: aesSalt, hash: keygenCrypto.defaultHKDFHash};
+                        let hmacHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: hmacSalt, hash: keygenCrypto.defaultHKDFHash};
+
+                        let aesRawKg =  window.crypto.subtle.importKey("raw", aesBits, "HKDF", false, ["deriveKey"]);
+                        let hmacRawKg =  window.crypto.subtle.importKey("raw", hmacBits, "HKDF", false, ["deriveKey"]);
+                        let aesRaw = await aesRawKg;
+                        let hmacRaw = await hmacRawKg;
+
+                        let aesKg = window.crypto.subtle.deriveKey(aesHkdfParams as any, aesRaw, aesParams, false, ["encrypt", "decrypt"]);
+                        let hmacKg = window.crypto.subtle.deriveKey(hmacHkdfParams as any, hmacRaw, hmacParams, false, ["sign", "verify"]);
+                        aesKey = await aesKg;
+                        hmacKey = await hmacKg;
+                    } catch (ex) {
+                        return null;
+                    }
+
+                    return {algo: algo, sym: {encrypt: aesKey, sign: hmacKey}, salt: null};
+                } else {
+                    return null;
+                }
+            }
+
+            static async fromPassword (password: string, algo: cryptoAlgos, salt: ArrayBuffer, iteration: number = keygenCrypto.defaultPBKDF2Iterations): Promise<cryptoKeySet> {
+                let rawKey: CryptoKey = null;
+                let keyBits: ArrayBuffer = null;
+                try {
+                    rawKey = await window.crypto.subtle.importKey("raw", stringEncoding.toUTF8(password), "PBKDF2", false, ["deriveBits"]);
+                    let pbkdf2Params = {name: "PBKDF2", iterations: this.defaultPBKDF2Iterations, salt: salt, hash: keygenCrypto.defaultPBKDF2Hash};
+                    keyBits = await window.crypto.subtle.deriveBits(pbkdf2Params, rawKey, keygenCrypto.defaultSymBitLength)
+                } catch (ex) {
+                    keyBits = null;
+                    return null;
+                }
+                
+                return await keygenCrypto.fromBits(algo, keyBits, salt);
+            }
+
+            static async fromRandom (algo: cryptoAlgos): Promise<cryptoKeySet> {
+                if (algo & calg.AES) {
+                    let keyBits = crypto.primitives.randomBits(keygenCrypto.defaultSymBitLength);
+                    let salt = crypto.primitives.randomBits(keygenCrypto.defaultSymBitLength);
+
+                    return await keygenCrypto.fromBits(algo, keyBits, salt);
+                } else if (algo & calg.ECDHE) {
+                    let ecdhParams: EcKeyGenParams = null;
+                    if (algo & calg.P384) {
+                        ecdhParams = {name: "ECDH", namedCurve: "P-384"};
+                    } else if (algo & calg.P521) {
+                        ecdhParams = {name: "ECDH", namedCurve: "P-521"};
+                    } else {
+                        return null;
+                    }
+
+                    let rawKeyPair: CryptoKeyPair = null;
+                    try {
+                        rawKeyPair = await window.crypto.subtle.generateKey(ecdhParams, false, ["deriveKey", "deriveBits"])
+                    } catch (ex) {
+                        return null;
+                    }
+
+                    let salt = crypto.primitives.randomBits(keygenCrypto.defaultEcdhSaltBitLength);
+                    if (salt === null) {
+                        return null;
+                    }
+
+                    return {algo: algo, asym: {public: rawKeyPair.publicKey, private: rawKeyPair.privateKey}, salt: salt};
+                } else if (algo & calg.ECDSA) {
+                    let ecdsaParams: EcKeyGenParams = null;
+                    if (algo & calg.P384) {
+                        ecdsaParams = {name: "ECDSA", namedCurve: "P-384"};
+                    } else if (algo & calg.P521) {
+                        ecdsaParams = {name: "ECDSA", namedCurve: "P-521"};
+                    } else {
+                        return null;
+                    }
+
+                    let rawKeyPair: CryptoKeyPair = null;
+                    try {
+                        rawKeyPair = await window.crypto.subtle.generateKey(ecdsaParams, false, ["sign", "verify"])
+                    } catch (ex) {
+                        return null;
+                    }
+
+                    return {algo: algo, asym: {public: rawKeyPair.publicKey, private: rawKeyPair.privateKey}, salt: null};
+                } else {
+                    return null;
+                }
+            }
+        };
 
         static symmetric = class symmetricCrypto {
             static aesCbcIvBitLength: number = 128;
@@ -1130,6 +1263,8 @@ export namespace passmngr {
         };
 
         static asymmetric = class asymmetricCrypto {
+            static ecdheBitsToDerive: number = 528;
+
             static async sign (keys: cryptoKeySet, data: ArrayBuffer): Promise<ArrayBuffer> {
                 if (isSymmetric(keys)) {
                     return null;
@@ -1179,148 +1314,117 @@ export namespace passmngr {
             }
 
             static async keyExchangeMarshshallPublic (keys: cryptoKeySet): Promise<ArrayBuffer> {
-
-            }
-
-            static async keyExchangeUnmarshallPublic (data: ArrayBuffer): Promise<cryptoKeySet> {
-
-            }
-
-            static async keyExchangeDeriveSecretBits (selfKeys: cryptoKeySet, otherKeys: cryptoKeySet): Promise<ArrayBuffer> {
-                
-            }
-        };
-
-        static keygen = class keygenCrypto {
-            static defaultPBKDF2Iterations: number = crypto.primitives.nextPrime(4194368);
-            static defaultPBKDF2Hash: string = "SHA-512";
-            static defaultHKDFHash: string = "SHA-256";
-            static defaultAESLength: number = 256;
-            static defaultSymBitLength: number = 512;
-            static defaultEcdhSaltBitLength: number = 256;
-
-            static async fromBits (algo: cryptoAlgos, bits: ArrayBuffer, salt: ArrayBuffer): Promise<cryptoKeySet> {
-                if ((algo & calg.AES) && (algo & calg.HMAC)) {
-                    // Symmetric encryption
-                    let aesParams: AesKeyGenParams = null
-                    if (algo & calg.CBC) {
-                        aesParams = {name: "AES-CBC", length: keygenCrypto.defaultAESLength};
-                    } else if (algo & calg.GCM) {
-                        aesParams = {name: "AES-GCM", length: keygenCrypto.defaultAESLength};
-                    } else {
-                        return null;
-                    }
-
-                    let hmacParams: HmacKeyGenParams = null;
-                    if (algo & calg.SHA256) {
-                        hmacParams = {name: "HMAC", hash: "SHA-256"};
-                    } else if (algo & calg.SHA384) {
-                        hmacParams = {name: "HMAC", hash: "SHA-384"};
-                    } else if (algo & calg.SHA512) {
-                        hmacParams = {name: "HMAC", hash: "SHA-512"};
-                    } else {
-                        return null;
-                    }
-
-                    let saltArray = new Uint8Array(salt)
-                    let aesSalt = saltArray.slice(0, saltArray.length >> 1);
-                    let hmacSalt = saltArray.slice(saltArray.length >> 1);
-
-                    let bitsArray = new Uint8Array(bits);
-                    let aesBits = bitsArray.slice(0, bitsArray.length >> 1);
-                    let hmacBits = bitsArray.slice(bitsArray.length >> 1);
-
-                    let aesKey: CryptoKey = null;
-                    let hmacKey: CryptoKey = null;
-
-                    try {
-                        let aesHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: aesSalt, hash: keygenCrypto.defaultHKDFHash};
-                        let hmacHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: hmacSalt, hash: keygenCrypto.defaultHKDFHash};
-
-                        let aesRawKg =  window.crypto.subtle.importKey("raw", aesBits, "HKDF", false, ["deriveKey"]);
-                        let hmacRawKg =  window.crypto.subtle.importKey("raw", hmacBits, "HKDF", false, ["deriveKey"]);
-                        let aesRaw = await aesRawKg;
-                        let hmacRaw = await hmacRawKg;
-
-                        let aesKg = window.crypto.subtle.deriveKey(aesHkdfParams as any, aesRaw, aesParams, false, ["encrypt", "decrypt"]);
-                        let hmacKg = window.crypto.subtle.deriveKey(hmacHkdfParams as any, hmacRaw, hmacParams, false, ["sign", "verify"]);
-                        aesKey = await aesKg;
-                        hmacKey = await hmacKg;
-                    } catch (ex) {
-                        return null;
-                    }
-
-                    return {algo: algo, sym: {encrypt: aesKey, sign: hmacKey}, salt: null};
-                } else {
+                if (isSymmetric(keys)) {
                     return null;
                 }
-            }
 
-            static async fromPassword (password: string, algo: cryptoAlgos, salt: ArrayBuffer, iteration: number = keygenCrypto.defaultPBKDF2Iterations): Promise<cryptoKeySet> {
-                let rawKey: CryptoKey = null;
-                let keyBits: ArrayBuffer = null;
+                if (keys.salt === null) {
+                    keys.salt = new ArrayBuffer(0);
+                }
+                
+                let extracted: ArrayBuffer = null;
                 try {
-                    rawKey = await window.crypto.subtle.importKey("raw", stringEncoding.toUTF8(password), "PBKDF2", false, ["deriveBits"]);
-                    let pbkdf2Params = {name: "PBKDF2", iterations: this.defaultPBKDF2Iterations, salt: salt, hash: keygenCrypto.defaultPBKDF2Hash};
-                    keyBits = await window.crypto.subtle.deriveBits(pbkdf2Params, rawKey, keygenCrypto.defaultSymBitLength)
+                    extracted = await window.crypto.subtle.exportKey("raw", keys.asym.public);
                 } catch (ex) {
-                    keyBits = null;
+                    return null;
+                }
+
+                let marshallBuffer = new Uint8Array(extracted.byteLength + keys.salt.byteLength + 4);
+                marshallBuffer.set([(keys.salt.byteLength & 0xFF00) >> 8, keys.salt.byteLength & 0x00FF], 0);
+                marshallBuffer.set(new Uint8Array(keys.salt), 2);
+                marshallBuffer.set([(extracted.byteLength & 0xFF00) >> 8, extracted.byteLength & 0x00FF], 2 + keys.salt.byteLength);
+                marshallBuffer.set(new Uint8Array(extracted), keys.salt.byteLength + 4);
+
+                return marshallBuffer.buffer;
+            }
+
+            static async keyExchangeUnmarshallPublic (algo: cryptoAlgos, data: ArrayBuffer): Promise<cryptoKeySet> {
+                if (!(algo & calg.ECDHE)) {
                     return null;
                 }
                 
-                return await keygenCrypto.fromBits(algo, keyBits, salt);
-            }
-
-            static async fromRandom (algo: cryptoAlgos): Promise<cryptoKeySet> {
-                if (algo & calg.AES) {
-                    let keyBits = crypto.primitives.randomBits(keygenCrypto.defaultSymBitLength);
-                    let salt = crypto.primitives.randomBits(keygenCrypto.defaultSymBitLength);
-
-                    return await keygenCrypto.fromBits(algo, keyBits, salt);
-                } else if (algo & calg.ECDHE) {
-                    let ecdhParams: EcKeyGenParams = null;
-                    if (algo & calg.P384) {
-                        ecdhParams = {name: "ECDH", namedCurve: "P-384"};
-                    } else if (algo & calg.P521) {
-                        ecdhParams = {name: "ECDH", namedCurve: "P-521"};
-                    } else {
-                        return null;
-                    }
-
-                    let rawKeyPair: CryptoKeyPair = null;
-                    try {
-                        rawKeyPair = await window.crypto.subtle.generateKey(ecdhParams, false, ["deriveKey", "deriveBits"])
-                    } catch (ex) {
-                        return null;
-                    }
-
-                    let salt = crypto.primitives.randomBits(keygenCrypto.defaultEcdhSaltBitLength);
-                    if (salt === null) {
-                        return null;
-                    }
-
-                    return {algo: algo, asym: {public: rawKeyPair.publicKey, private: rawKeyPair.privateKey}, salt: salt};
-                } else if (algo & calg.ECDSA) {
-                    let ecdsaParams: EcKeyGenParams = null;
-                    if (algo & calg.P384) {
-                        ecdsaParams = {name: "ECDSA", namedCurve: "P-384"};
-                    } else if (algo & calg.P521) {
-                        ecdsaParams = {name: "ECDSA", namedCurve: "P-521"};
-                    } else {
-                        return null;
-                    }
-
-                    let rawKeyPair: CryptoKeyPair = null;
-                    try {
-                        rawKeyPair = await window.crypto.subtle.generateKey(ecdsaParams, false, ["sign", "verify"])
-                    } catch (ex) {
-                        return null;
-                    }
-
-                    return {algo: algo, asym: {public: rawKeyPair.publicKey, private: rawKeyPair.privateKey}, salt: null};
-                } else {
+                let dataArr = new Uint8Array(data);
+                if (dataArr.length <= 2) {
                     return null;
                 }
+                let saltLength = ((dataArr[0] << 8) | dataArr[1]);
+                if (dataArr.length < saltLength + 2) {
+                    return null;
+                }
+                let salt = data.slice(2, 2 + saltLength);
+                if (dataArr.length < saltLength + 4) {
+                    return null;
+                }
+                let keyLength = ((dataArr[2 + saltLength] >> 8) | dataArr[3 + saltLength]);
+                if (dataArr.length < saltLength + keyLength + 4) {
+                    return null;
+                }
+                let key = data.slice(saltLength + 4, saltLength + keyLength + 4);
+
+                let pubKey: CryptoKey = null;
+                let ecdheKeyParams: EcKeyImportParams = null;
+                if (algo & calg.P384) {
+                    ecdheKeyParams = {name: "ECDH", namedCurve: "P-384"};
+                } else if  (algo & calg.P521) {
+                    ecdheKeyParams = {name: "ECDH", namedCurve: "P-521"};
+                }
+
+                try {
+                    pubKey = await window.crypto.subtle.importKey("raw", key, ecdheKeyParams, false, ["deriveBits"]);
+                } catch (ex) {
+                    return null;
+                }
+
+                return {algo: algo, asym: {private: null, public: pubKey}, salt: salt};
+            }
+
+            static async keyExchangeDeriveSymmetricKeys (algo: cryptoAlgos, selfKeys: cryptoKeySet, otherKeys: cryptoKeySet): Promise<cryptoKeySet> {
+                if (isSymmetric(selfKeys) || isSymmetric(otherKeys) || selfKeys.algo != otherKeys.algo || !(selfKeys.algo & calg.ECDHE)) {
+                    return null;
+                }
+
+                if (!(algo & calg.AES) || !(algo & calg.HMAC)) {
+                    return null;
+                }
+
+                let selfSaltArr = new Uint8Array(selfKeys.salt);
+                let otherSaltArr = new Uint8Array(otherKeys.salt);
+                let selfSaltFirst = true;
+                for (let i = 0; i < Math.min(selfSaltArr.length, otherSaltArr.length); i++) {
+                    if (selfSaltArr[i] > otherSaltArr[i]) {
+                        selfSaltFirst = true;
+                        break;
+                    } else if (selfSaltArr[i] < otherSaltArr[i]) {
+                        selfSaltFirst = false;
+                        break;
+                    }
+                }
+
+
+                let aesSalt: ArrayBuffer = null;
+                let hmacSalt: ArrayBuffer = null;
+                if (selfSaltFirst) {
+                    aesSalt = selfKeys.salt;
+                    hmacSalt = otherKeys.salt;
+                } else {
+                    aesSalt = otherKeys.salt;
+                    hmacSalt = selfKeys.salt;
+                }
+
+                let combinedSalt = new Uint8Array(aesSalt.byteLength + hmacSalt.byteLength);
+                combinedSalt.set(new Uint8Array(aesSalt));
+                combinedSalt.set(new Uint8Array(hmacSalt), aesSalt.byteLength);
+                
+                let derivedBits: ArrayBuffer = null;
+                let ecdheParams: EcdhKeyDeriveParams = null;
+                ecdheParams = {name: "ECDH", public: otherKeys.asym.public};
+                try {
+                    derivedBits = await window.crypto.subtle.deriveBits(ecdheParams, selfKeys.asym.private, asymmetricCrypto.ecdheBitsToDerive);
+                } catch (ex) {
+                    return null;
+                }
+
+                return crypto.keygen.fromBits(algo, derivedBits, combinedSalt.buffer);
             }
         };
     }
