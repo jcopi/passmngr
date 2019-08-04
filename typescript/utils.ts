@@ -304,7 +304,7 @@ export class stringEncoding {
     }
 }
 
-export class algos {
+/*export class algos {
     static smallPrimes: Uint32Array = new Uint32Array([2,3,5,7,11,13,17,19,23,29]);
     static primeIndices: Uint32Array = new Uint32Array([1,7,11,13,17,19,23,29]);
     static isPrime (y: number): boolean {
@@ -419,7 +419,6 @@ export type AsymmetricKeyPair = {
     private: CryptoKey;
     salt: ArrayBuffer;
 }
-
 export class crypto {
     static randomBytes (count: number): ArrayBuffer {
         let buffer = new Uint8Array(count);
@@ -806,10 +805,10 @@ export class crypto {
             }
         }
     };
-}
+}*/
 
 export namespace passmngr {
-    enum calg {
+    export enum calg {
         AES    = 0b00000001,
         CBC    = 0b00000010,
         GCM    = 0b00000100,
@@ -825,14 +824,14 @@ export namespace passmngr {
         ECDHE  = 0b00001000 << 8
     }
 
-    enum cryptoAlgos {
+    export enum cryptoAlgos {
         AES_CBC_256_HMAC_SHA256 = calg.AES | calg.CBC | calg.HMAC | calg.SHA256,
         AES_CBC_256_HMAC_SHA384 = calg.AES | calg.CBC | calg.HMAC | calg.SHA384,
         AES_CBC_256_HMAC_SHA512 = calg.AES | calg.CBC | calg.HMAC | calg.SHA512,
         AES_GCM_256_HMAC_SHA256 = calg.AES | calg.GCM | calg.HMAC | calg.SHA256,
         AES_GCM_256_HMAC_SHA384 = calg.AES | calg.GCM | calg.HMAC | calg.SHA384,
         AES_GCM_256_HMAC_SHA512 = calg.AES | calg.GCM | calg.HMAC | calg.SHA512,
-        ECDHE_P521 = calg.ECDHE | calg.P384,
+        ECDHE_P521 = calg.ECDHE | calg.P521,
         ECDHE_P384 = calg.ECDHE | calg.P384,
         ECDSA_P521_SHA256 = calg.ECDSA | calg.P521 | calg.SHA256,
         ECDSA_P521_SHA384 = calg.ECDSA | calg.P521 | calg.SHA384,
@@ -842,7 +841,7 @@ export namespace passmngr {
         ECDSA_P384_SHA512 = calg.ECDSA | calg.P384 | calg.SHA512
     }
 
-    type cryptoSymKeySet = {
+    export type cryptoSymKeySet = {
         algo: cryptoAlgos;
         sym: {
             encrypt: CryptoKey;
@@ -851,7 +850,7 @@ export namespace passmngr {
         salt: ArrayBuffer;
     }
 
-    type cryptoAsymKeySet = {
+    export type cryptoAsymKeySet = {
         algo: cryptoAlgos;
         asym: {
             public: CryptoKey;
@@ -860,13 +859,13 @@ export namespace passmngr {
         salt: ArrayBuffer;
     }
 
-    type cryptoKeySet = cryptoSymKeySet | cryptoAsymKeySet;
+    export type cryptoKeySet = cryptoSymKeySet | cryptoAsymKeySet;
 
-    function isSymmetric(keySet: cryptoKeySet): keySet is cryptoSymKeySet {
+    export function isSymmetric(keySet: cryptoKeySet): keySet is cryptoSymKeySet {
         return (keySet as cryptoSymKeySet).sym !== undefined;
     }
 
-    class crypto {
+    export class crypto {
 
         static primitives = class cryptoPrimitives {
             static randomBytes (count: number): ArrayBuffer {
@@ -890,8 +889,8 @@ export namespace passmngr {
                 u32[2] = y;
 
                 // Check all of the small primes
-                for (let i = 0; i < algos.smallPrimes.length; ++i) {
-                    u32[1] = algos.smallPrimes[i];
+                for (let i = 0; i < cryptoPrimitives.smallPrimes.length; ++i) {
+                    u32[1] = cryptoPrimitives.smallPrimes[i];
                     u32[0] = u32[2] / u32[1];
                     if (u32[0] < u32[1]) return true;
                     if (u32[2] == u32[0] * u32[1]) return false;
@@ -957,31 +956,31 @@ export namespace passmngr {
             }
         
             static nextPrime (n: number): number {
-                const small_primes = algos.smallPrimes;
-                const indices = algos.primeIndices;
+                const small_primes = cryptoPrimitives.smallPrimes;
+                const indices = cryptoPrimitives.primeIndices;
         
                 const L = 30;
-                const N = algos.smallPrimes.length;
+                const N = cryptoPrimitives.smallPrimes.length;
                 // If n is small enough, search in small_primes
-                if (n <= algos.smallPrimes[N-1]) {
-                    return algos.smallPrimes[algos.lowerBound(algos.smallPrimes, n)];
+                if (n <= cryptoPrimitives.smallPrimes[N-1]) {
+                    return cryptoPrimitives.smallPrimes[cryptoPrimitives.lowerBound(cryptoPrimitives.smallPrimes, n)];
                 }
                 // Else n > largest small_primes
                 // Start searching list of potential primes: L * k0 + indices[in]
-                const M = algos.primeIndices.length;
+                const M = cryptoPrimitives.primeIndices.length;
                 // Select first potential prime >= n
                 //   Known a-priori n >= L
                 let k0 = (n / L) | 0; // Coerce to Uint32
-                let inn = algos.lowerBound(algos.primeIndices, n - k0 * L);
-                n = L * k0 + algos.primeIndices[inn];
-                while (!algos.isPrime(n))
+                let inn = cryptoPrimitives.lowerBound(cryptoPrimitives.primeIndices, n - k0 * L);
+                n = L * k0 + cryptoPrimitives.primeIndices[inn];
+                while (!cryptoPrimitives.isPrime(n))
                 {
                     if (++inn == M)
                     {
                         ++k0;
                         inn = 0;
                     }
-                    n = L * k0 + algos.primeIndices[inn];
+                    n = L * k0 + cryptoPrimitives.primeIndices[inn];
                 }
                 return n;
             }
@@ -1263,7 +1262,7 @@ export namespace passmngr {
         };
 
         static asymmetric = class asymmetricCrypto {
-            static ecdheBitsToDerive: number = 528;
+            static ecdheBitsToDerive: number = 256;
 
             static async sign (keys: cryptoKeySet, data: ArrayBuffer): Promise<ArrayBuffer> {
                 if (isSymmetric(keys)) {
@@ -1313,7 +1312,7 @@ export namespace passmngr {
                 return verified;
             }
 
-            static async keyExchangeMarshshallPublic (keys: cryptoKeySet): Promise<ArrayBuffer> {
+            static async keyExchangeMarshallPublic (keys: cryptoKeySet): Promise<ArrayBuffer> {
                 if (isSymmetric(keys)) {
                     return null;
                 }
@@ -1355,7 +1354,7 @@ export namespace passmngr {
                 if (dataArr.length < saltLength + 4) {
                     return null;
                 }
-                let keyLength = ((dataArr[2 + saltLength] >> 8) | dataArr[3 + saltLength]);
+                let keyLength = ((dataArr[2 + saltLength] << 8) | dataArr[3 + saltLength]);
                 if (dataArr.length < saltLength + keyLength + 4) {
                     return null;
                 }
