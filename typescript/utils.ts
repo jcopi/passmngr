@@ -304,512 +304,119 @@ export class stringEncoding {
     }
 }
 
-/*export class algos {
-    static smallPrimes: Uint32Array = new Uint32Array([2,3,5,7,11,13,17,19,23,29]);
-    static primeIndices: Uint32Array = new Uint32Array([1,7,11,13,17,19,23,29]);
-    static isPrime (y: number): boolean {
-        let u32 = new Uint32Array(4);
-        u32[2] = y;
+declare global {
+    interface Uint8Array {
+        setBit(index: number, value: number): void;
+        getBit(index: number): number;
+    }
+}
 
-        // Check all of the small primes
-        for (let i = 0; i < algos.smallPrimes.length; ++i) {
-            u32[1] = algos.smallPrimes[i];
-            u32[0] = u32[2] / u32[1];
-            if (u32[0] < u32[1]) return true;
-            if (u32[2] == u32[0] * u32[1]) return false;
-        }
+Uint8Array.prototype.setBit = function (index: number, value: number): void {
+    let i = index >> 3;
+    let j = 7 - (index & 0b111);
+    value = value != 0 ? 1 : 0;
+
+    if (i < this.length) {
+        let num = 1 << j;
+        this[i] &= ~num;
+        this[i] |= (value << j) & num;
+    }
+
+    return;
+}
+
+Uint8Array.prototype.getBit = function (index: number): number {
+    let i = index >> 3;
+    let j = 7 - (index & 0b111);
+    let value = 0;
+
+    if (i < this.length) {
+        value = (this[i] & (1 << j)) >> j;
+    }
+
+    return value;
+}
+
+type entropyEncodeModel = {
+    decode: Uint8Array;
+    encode: Map<number, number>;
+}
+
+export class compress {
+    static jsonEntropyModel: entropyEncodeModel = {
+        decode: new Uint8Array(stringEncoding.toUTF8("{:\",}/e sltrano-")),
+        encode: new Map(["{",":","\"",",","}","/","e"," ","s","l","t","r","a","n","o","-"].map((v, i) => [v.charCodeAt(0),i]))
+    };
+
+    
+    static entropyEncode (model: entropyEncodeModel, data: ArrayBuffer): ArrayBuffer {
+        let input = new Uint8Array(data);
+        let result = new Uint8Array(Math.ceil((9/8) * input.length));
+        let j = 0;
         
-        for (u32[3] = 31; true;) {
-            u32[0] = u32[2] / u32[3];
-            if (u32[0] < u32[3]) return true;
-            if (u32[2] == u32[0] * u32[3]) return false;
-            u32[3] += 6;
-
-            u32[0] = u32[2] / u32[3];
-            if (u32[0] < u32[3]) return true;
-            if (u32[2] == u32[0] * u32[3]) return false;
-            u32[3] += 4;
-
-            u32[0] = u32[2] / u32[3];
-            if (u32[0] < u32[3]) return true;
-            if (u32[2] == u32[0] * u32[3]) return false;
-            u32[3] += 2;
-
-            u32[0] = u32[2] / u32[3];
-            if (u32[0] < u32[3]) return true;
-            if (u32[2] == u32[0] * u32[3]) return false;
-            u32[3] += 4;
-
-            u32[0] = u32[2] / u32[3];
-            if (u32[0] < u32[3]) return true;
-            if (u32[2] == u32[0] * u32[3]) return false;
-            u32[3] += 2;
-
-            u32[0] = u32[2] / u32[3];
-            if (u32[0] < u32[3]) return true;
-            if (u32[2] == u32[0] * u32[3]) return false;
-            u32[3] += 4;
-
-            u32[0] = u32[2] / u32[3];
-            if (u32[0] < u32[3]) return true;
-            if (u32[2] == u32[0] * u32[3]) return false;
-            u32[3] += 6;
-
-            u32[0] = u32[2] / u32[3];
-            if (u32[0] < u32[3]) return true;
-            if (u32[2] == u32[0] * u32[3]) return false;
-            u32[3] += 2;
-        }
-
-        return true;
-    }
-
-    static lowerBound (list: ArrayLike<any>, value: any): number {
-        let l = 0;
-        let h = list.length;
-        while (l < h) {
-            let mid = ((l + h) | 0) >> 1;
-            if (value <= list[mid]) {
-                h = mid;
+        for (let i = 0; i < input.length; i++) {
+            let replacement = model.encode.get(input[i]);
+            if (replacement !== undefined) {
+                result.setBit(j++, 1);
+                result.setBit(j++, (replacement & 0b1000) >> 3);
+                result.setBit(j++, (replacement & 0b0100) >> 2);
+                result.setBit(j++, (replacement & 0b0010) >> 1);
+                result.setBit(j++, replacement & 0b0001);
             } else {
-                l = mid + 1;
+                result.setBit(j++, 0);
+                result.setBit(j++, (input[i] & 0b10000000) >> 7);
+                result.setBit(j++, (input[i] & 0b01000000) >> 6);
+                result.setBit(j++, (input[i] & 0b00100000) >> 5);
+                result.setBit(j++, (input[i] & 0b00010000) >> 4);
+                result.setBit(j++, (input[i] & 0b00001000) >> 3);
+                result.setBit(j++, (input[i] & 0b00000100) >> 2);
+                result.setBit(j++, (input[i] & 0b00000010) >> 1);
+                result.setBit(j++,  input[i] & 0b00000001);
             }
-        }
-        return l;
-    }
-
-    static nextPrime (n: number): number {
-        const small_primes = algos.smallPrimes;
-        const indices = algos.primeIndices;
-
-        const L = 30;
-        const N = algos.smallPrimes.length;
-        // If n is small enough, search in small_primes
-        if (n <= algos.smallPrimes[N-1]) {
-            return algos.smallPrimes[algos.lowerBound(algos.smallPrimes, n)];
-        }
-        // Else n > largest small_primes
-        // Start searching list of potential primes: L * k0 + indices[in]
-        const M = algos.primeIndices.length;
-        // Select first potential prime >= n
-        //   Known a-priori n >= L
-        let k0 = (n / L) | 0; // Coerce to Uint32
-        let inn = algos.lowerBound(algos.primeIndices, n - k0 * L);
-        n = L * k0 + algos.primeIndices[inn];
-        while (!algos.isPrime(n))
-        {
-            if (++inn == M)
-            {
-                ++k0;
-                inn = 0;
-            }
-            n = L * k0 + algos.primeIndices[inn];
-        }
-        return n;
-    }
-}
-
-export type SymmetricKeyPair = {
-    aes: CryptoKey;
-    hmac: CryptoKey;
-}
-
-export type AsymmetricKeyPair = {
-    public: CryptoKey;
-    private: CryptoKey;
-    salt: ArrayBuffer;
-}
-
-export class crypto {
-    static randomBytes (count: number): ArrayBuffer {
-        let buffer = new Uint8Array(count);
-        try {
-            window.crypto.getRandomValues(buffer);
-        } catch (ex) {
-            return null;
-        }
-        return buffer;
-    }
-
-    static symmetric = class symmetricCrypto {
-        static PBKDF_ITERATIONS: number = algos.nextPrime(4194368);
-        static PBKDF_HASH: string = "SHA-512";
-        static HKDF_HASH: string = "SHA-256";
-        static HMAC_HASH: string = "SHA-256";
-        static AES_KEY_LENGTH: number = 256;
-        static AES_KEY_BYTE_CNT: number = 32;
-        static AES_CBC_IV_BYTE_CNT: number = 16;
-    
-        static async deriveKeysFromPassword (password: string, aesSalt: ArrayBuffer, hmacSalt: ArrayBuffer): Promise<SymmetricKeyPair> {
-            let aesSaltArr = new Uint8Array(aesSalt);
-            let hmacSaltArr = new Uint8Array(hmacSalt);
-            
-            let combinedSalt = new Uint8Array(aesSaltArr.length + hmacSaltArr.length);
-            combinedSalt.set(aesSaltArr);
-            combinedSalt.set(hmacSaltArr, aesSaltArr.length);
-    
-            let rawKey: CryptoKey = null;
-            try {
-                rawKey = await window.crypto.subtle.importKey("raw", stringEncoding.toUTF8(password), "PBKDF2", false, ["deriveBits"]);
-            } catch (ex) {
-                return null;
-            }
-    
-            let bits: ArrayBuffer = null;
-            try {
-                let pbkdf2Params = {name: "PBKDF2", iterations: symmetricCrypto.PBKDF_ITERATIONS, salt: combinedSalt, hash: symmetricCrypto.PBKDF_HASH};
-                bits = await window.crypto.subtle.deriveBits(pbkdf2Params, rawKey, 512);
-            } catch (ex) {
-                return null;
-            }
-            let bitsArr = new Uint8Array(bits);
-    
-            let aesBits = bitsArr.slice(0, Math.floor(bitsArr.length / 2));
-            let hmacBits = bitsArr.slice(Math.floor(bitsArr.length / 2));
-    
-            let aesRaw: CryptoKey = null;
-            let hmacRaw: CryptoKey = null;
-            try {
-                aesRaw = await window.crypto.subtle.importKey("raw", aesBits, "HKDF", false, ["deriveKey"]);
-                hmacRaw = await window.crypto.subtle.importKey("raw", hmacBits, "HKDF", false, ["deriveKey"]);
-            } catch (ex) {
-                return null;
-            }
-            
-            let aesKey: CryptoKey = null;
-            try {
-                let aesHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: aesSalt, hash: symmetricCrypto.HKDF_HASH};
-                let aesParams = {name: "AES-CBC", length: symmetricCrypto.AES_KEY_LENGTH};
-                aesKey = await window.crypto.subtle.deriveKey(aesHkdfParams as any, aesRaw, aesParams, false, ["encrypt", "decrypt"]);
-            } catch (ex) {
-                return null;
-            }
-    
-            let hmacKey: CryptoKey = null;
-            try {
-                let hmacHkdfParams = {name: "HKDF", info: new ArrayBuffer(0), salt: hmacSalt, hash: symmetricCrypto.HKDF_HASH};
-                let hmacParams = {name: "HMAC", hash: symmetricCrypto.HMAC_HASH};
-                hmacKey = await window.crypto.subtle.deriveKey(hmacHkdfParams as any, hmacRaw, hmacParams, false, ["sign", "verify"]);
-            } catch (ex) {
-                return null;
-            }
-    
-            return {aes: aesKey, hmac: hmacKey};
-        }
-    
-        static async deriveKeysFromBytes (bytes: ArrayBuffer, aesSalt: ArrayBuffer, hmacSalt: ArrayBuffer, info: ArrayBuffer): Promise<SymmetricKeyPair> {
-            let bytesArr = new Uint8Array(bytes);
-            let hmacArr: Uint8Array = null;
-            let aesArr: Uint8Array = null;
-            if (bytesArr.length > symmetricCrypto.AES_KEY_BYTE_CNT) {
-                aesArr = bytesArr.slice(0, Math.floor(bytesArr.length / 2));
-                hmacArr = bytesArr.slice(Math.floor(bytesArr.length / 2));
-            } else {
-                aesArr = bytesArr;
-                hmacArr = bytesArr;
-            }
-            let aesRawKey: CryptoKey = null;
-            let hmacRawKey: CryptoKey = null;
-            try {
-                aesRawKey = await window.crypto.subtle.importKey("raw", aesArr, "HKDF", false, ["deriveKey"]);
-                hmacRawKey = await window.crypto.subtle.importKey("raw", hmacArr, "HKDF", false, ["deriveKey"]);
-            } catch (ex) {
-                throw "1"
-                return null;
-            }
-            
-            let aesKey: CryptoKey = null;
-            try {
-                let aesHkdfParams = {name: "HKDF", info: info, salt: aesSalt, hash: symmetricCrypto.HKDF_HASH};
-                let aesParams = {name: "AES-CBC", length: symmetricCrypto.AES_KEY_LENGTH};
-                aesKey = await window.crypto.subtle.deriveKey(aesHkdfParams as any, aesRawKey, aesParams, false, ["encrypt", "decrypt"]);
-            } catch (ex) {
-                throw "2"
-                return null;
-            }
-    
-            let hmacKey: CryptoKey = null;
-            try {
-                let hmacHkdfParams = {name: "HKDF", info: info, salt: hmacSalt, hash: symmetricCrypto.HKDF_HASH};
-                let hmacParams = {name: "HMAC", hash: symmetricCrypto.HMAC_HASH};
-                hmacKey = await window.crypto.subtle.deriveKey(hmacHkdfParams as any, hmacRawKey, hmacParams, false, ["sign", "verify"]);
-            } catch (ex) {
-                throw "3"
-                return null;
-            }
-    
-            return {aes: aesKey, hmac: hmacKey};
-        }
-    
-        static async encrypt (keys: SymmetricKeyPair, data: ArrayBuffer): Promise<ArrayBuffer> {
-            let iv = crypto.randomBytes(symmetricCrypto.AES_CBC_IV_BYTE_CNT);
-            if (iv === null) {
-                return null;
-            }
-            let ivArr = new Uint8Array(iv);
-    
-            let cipher: ArrayBuffer = null;
-            try {
-                let aesParams = {name: "AES-CBC", iv: iv};
-                cipher = await window.crypto.subtle.encrypt(aesParams, keys.aes, data);
-            } catch (ex) {
-                return null;
-            }
-            let cipherArr = new Uint8Array(cipher);
-    
-            let combinedCT = new Uint8Array(ivArr.length + cipherArr.length);
-            combinedCT.set(ivArr);
-            combinedCT.set(cipherArr, ivArr.length);
-    
-            let signature: ArrayBuffer = null;
-            try {
-                signature = await window.crypto.subtle.sign("HMAC", keys.hmac, combinedCT);
-            } catch (ex) {
-                return null;
-            }
-            let sigArr = new Uint8Array(signature);
-    
-            let resultArr = new Uint8Array(1 + sigArr.length + 1 + ivArr.length + cipherArr.length);
-            resultArr.set([sigArr.length]);
-            resultArr.set(sigArr, 1);
-    
-            resultArr.set([ivArr.length], 1 + sigArr.length);
-            resultArr.set(ivArr, 1 + sigArr.length + 1);
-    
-            resultArr.set(cipherArr, 1 + sigArr.length + 1 + ivArr.length);
-    
-            return resultArr.buffer;
-        }
-    
-        static async decrypt (keys: SymmetricKeyPair, data: ArrayBuffer): Promise<ArrayBuffer> {
-            if (data.byteLength <= 0) return null;
-            
-            let dataArr = new Uint8Array(data);
-            let hmacLength = dataArr[0]
-            if (dataArr.length <= hmacLength + 1) return null;
-    
-            let hmac = dataArr.slice(1, 1 + hmacLength);
-            let ivLength = dataArr[1 + hmacLength];
-            if (dataArr.length <= 1 + hmac.length + 1 + ivLength) return null;
-    
-            let iv = dataArr.slice(1 + hmac.length + 1, 1 + hmac.length + 1 + ivLength);
-            let cipher = dataArr.slice(1 + hmac.length + 1 + ivLength);
-    
-            let combinedCT = new Uint8Array(iv.length + cipher.length);
-            combinedCT.set(iv);
-            combinedCT.set(cipher, iv.length);
-    
-            let verified: boolean = false;
-            try {
-                verified = await window.crypto.subtle.verify("HMAC", keys.hmac, hmac, combinedCT);
-                if (!verified) {
-                    return null;
-                }
-            } catch (ex) {
-                return null;
-            }
-    
-            let message: ArrayBuffer = null;
-            try {
-                let aesParams = {name: "AES-CBC", iv: iv};
-                message = await window.crypto.subtle.decrypt(aesParams, keys.aes, cipher);
-            } catch (ex) {
-                return null;
-            }
-    
-            return message;
         }
 
-        static async sign (keys: SymmetricKeyPair, data: ArrayBuffer): Promise<ArrayBuffer> {
-            let signature: ArrayBuffer = null;
-            try {
-                signature = await window.crypto.subtle.sign("HMAC", keys.hmac, data);
-            } catch (ex) {
-                return null;
-            }
-            
-            return signature;
-        }
-
-        static async verify (keys: SymmetricKeyPair, data: ArrayBuffer, signature: ArrayBuffer): Promise<boolean> {
-            let verified: boolean = false;
-            try {
-                verified = await window.crypto.subtle.verify("HMAC", keys.hmac, signature, data);
-            } catch (ex) {
-                return false;
-            }
-
-            return verified;
-        }
+        return result.slice(0, (j >> 3) + Math.min(1, j & 0b111)).buffer;
     };
 
-    static asymmetric = class asymmetricCrypto {
-        static ecdh = class ecdhCrypto {
-            static ECDH_SALT_BYTE_CNT: number = 32;
-            static ECDH_SHARED_LENGTH: number = 528;
+    static entropyDecode (model: entropyEncodeModel, data: ArrayBuffer): ArrayBuffer {
+        let input = new Uint8Array(data);
+        let result = new Uint8Array(Math.ceil((8/5) * input.length));
+        let j = 0;
 
-            static async generateKeyPair (): Promise<AsymmetricKeyPair> {
-                let rawKeyPair: CryptoKeyPair = null;
-                try {
-                    let ecdhParams = {name:"ECDH", namedCurve:"P-521"};
-                    rawKeyPair = await window.crypto.subtle.generateKey(ecdhParams, false, ["deriveKey", "deriveBits"]);
-                } catch (ex) {
-                    return null;
+        for (let i = 0; i < input.length << 3;) {
+            if (input.getBit(i++) === 1) {
+                let num = 0;
+                num |= input.getBit(i++) << 3;
+                num |= input.getBit(i++) << 2;
+                num |= input.getBit(i++) << 1;
+                num |= input.getBit(i++);
+
+                result[j++] = model.decode[num];
+            } else {
+                if (i + 8 > input.length << 3) {
+                    break;
                 }
 
-                let salt = crypto.randomBytes(ecdhCrypto.ECDH_SALT_BYTE_CNT);
-                if (salt === null) return null;
+                let num = 0;
+                num |= input.getBit(i++) << 7;
+                num |= input.getBit(i++) << 6;
+                num |= input.getBit(i++) << 5;
+                num |= input.getBit(i++) << 4;
+                num |= input.getBit(i++) << 3;
+                num |= input.getBit(i++) << 2;
+                num |= input.getBit(i++) << 1;
+                num |= input.getBit(i++);
 
-                return {public: rawKeyPair.publicKey, private: rawKeyPair.privateKey, salt: salt};
-            }
-
-            static async marshallPublicKey (keys: AsymmetricKeyPair, info: ArrayBuffer): Promise<ArrayBuffer> {
-                let extractedPublic: ArrayBuffer = null;
-                try {
-                    extractedPublic = await window.crypto.subtle.exportKey("raw", keys.public);
-                } catch (ex) {
-                    return null;
-                }
-                
-                let saltArr = new Uint8Array(keys.salt);
-                let publicArr = new Uint8Array(extractedPublic);
-                let infoArr = new Uint8Array(info);
-
-                let buffer = new Uint8Array(1 + saltArr.length + 1 + publicArr.length + infoArr.length);
-                buffer.set([saltArr.length]);
-                buffer.set(saltArr, 1);
-                buffer.set([publicArr.length], 1 + saltArr.length);
-                buffer.set(publicArr, 1 + saltArr.length + 1);
-                buffer.set(infoArr, 1 + saltArr.length + 1 + publicArr.length);
-
-                return buffer;
-            }
-
-            static async unmarshallPublicKey (data: ArrayBuffer): Promise<[AsymmetricKeyPair, ArrayBuffer]> {
-                if (data.byteLength <= 0) return null;
-
-                let dataArr = new Uint8Array(data);
-                let saltLength = dataArr[0];
-                if (dataArr.length <= 1 + saltLength) return null;
-
-                let salt = dataArr.slice(1, 1 + saltLength);
-                let publicLength = dataArr[1 + saltLength];
-                if (dataArr.length < 1 + saltLength + 1 + publicLength) return null;
-
-                let publicKey = dataArr.slice(1 + saltLength + 1, 1 + saltLength + 1 + publicLength);
-                let info = dataArr.slice(1 + saltLength + 1 + publicLength);
-
-                let rawPublic: CryptoKey = null;
-                try {
-                    let ecdhParams = {name:"ECDH", namedCurve:"P-521"};
-                    rawPublic = await window.crypto.subtle.importKey("raw", publicKey, ecdhParams, false, ["deriveBits"])
-                } catch (ex) {
-                    return null;
-                }
-
-                return [{private: null, public: rawPublic, salt: salt}, info]
-            }
-
-            static async deriveSharedSymmetricKeys (personalKeys: AsymmetricKeyPair, othersKeys: AsymmetricKeyPair, info: ArrayBuffer, serverRole: boolean): Promise<SymmetricKeyPair> {
-                if (personalKeys.private === null || personalKeys.public === null || personalKeys.salt === null) 
-                    return null;
-                if (othersKeys.public === null || othersKeys.salt === null || othersKeys.private !== null)
-                    return null;
-
-                let sharedBits: ArrayBuffer = null;
-                try {
-                    let ecdhParams = {name:"ECDH", namedCurve:"P-521", public:othersKeys.public};
-                    sharedBits = await window.crypto.subtle.deriveBits(ecdhParams, personalKeys.private, ecdhCrypto.ECDH_SHARED_LENGTH);
-                } catch (ex) {
-                    return null;
-                }
-
-                let sharedArr = new Uint8Array(sharedBits);
-                if (sharedArr[0] === 0) {
-                    sharedArr = sharedArr.slice(1);
-                }
-            
-                let othersSaltArr = new Uint8Array(othersKeys.salt);
-                let personalSaltArr = new Uint8Array(personalKeys.salt);
-                let hmacSalt: Uint8Array = null;
-                let aesSalt: Uint8Array = null;
-
-                if (serverRole) {
-                    let personalHmacSalt = personalSaltArr.slice(0, Math.floor(personalSaltArr.length / 2));
-                    let personalAesSalt = personalSaltArr.slice(Math.floor(personalSaltArr.length / 2));
-                    let othersHmacSalt = othersSaltArr.slice(Math.floor(othersSaltArr.length / 2));
-                    let othersAesSalt = othersSaltArr.slice(0, Math.floor(othersSaltArr.length / 2));
-
-                    hmacSalt = new Uint8Array(personalHmacSalt.length + othersHmacSalt.length);
-                    aesSalt = new Uint8Array(othersAesSalt.length + personalAesSalt.length);
-                    hmacSalt.set(personalHmacSalt);
-                    hmacSalt.set(othersHmacSalt, personalHmacSalt.length);
-                    aesSalt.set(othersAesSalt);
-                    aesSalt.set(personalAesSalt, othersAesSalt.length);
-                } else {
-                    let personalAesSalt = personalSaltArr.slice(0, Math.floor(personalSaltArr.length / 2));
-                    let personalHmacSalt = personalSaltArr.slice(Math.floor(personalSaltArr.length / 2));
-                    let othersAesSalt = othersSaltArr.slice(Math.floor(othersSaltArr.length / 2));
-                    let othersHmacSalt = othersSaltArr.slice(0, Math.floor(othersSaltArr.length / 2));
-
-                    hmacSalt = new Uint8Array(personalHmacSalt.length + othersHmacSalt.length);
-                    aesSalt = new Uint8Array(othersAesSalt.length + personalAesSalt.length);
-                    hmacSalt.set(othersHmacSalt);
-                    hmacSalt.set(personalHmacSalt, othersHmacSalt.length);
-                    aesSalt.set(personalAesSalt);
-                    aesSalt.set(othersAesSalt, personalAesSalt.length);
-                }
-
-                let keys = await crypto.symmetric.deriveKeysFromBytes(sharedArr.buffer, aesSalt.buffer, hmacSalt.buffer, info);
-                return keys;
+                result[j++] = num;
             }
         }
 
-        static rsa = class rsaCrypto {
-            static RSA_SIGNATURE_HASH: string = "SHA-512";
-            static RSA_SALT_BYTE_CNT: number = 64;
-
-            static async generateKeyPair (): Promise<AsymmetricKeyPair> {
-                let rawKeyPair: CryptoKeyPair = null;
-                try {
-                    let rsaPssParams = {name: "RSA-PSS", modulusLength: 4096, publicExponent: new Uint8Array([1,0,1]), hash: rsaCrypto.RSA_SIGNATURE_HASH};
-                    rawKeyPair = await window.crypto.subtle.generateKey(rsaPssParams, false, ["sign", "verify"]);
-                } catch (ex) {
-                    return null;
-                }
-
-                return {public: rawKeyPair.publicKey, private: rawKeyPair.privateKey, salt: null};
-            }
-
-            static async sign (keys: AsymmetricKeyPair, data: ArrayBuffer): Promise<ArrayBuffer> {
-                let signature: ArrayBuffer = null;
-                try {
-                    let rsaPssParams = {name: "RSA-PSS", saltLength: rsaCrypto.RSA_SALT_BYTE_CNT};
-                    signature = await window.crypto.subtle.sign(rsaPssParams, keys.private, data);
-                } catch (ex) {
-                    return null;
-                }
-
-                return signature;
-            }
-
-            static async verify (keys: AsymmetricKeyPair, data: ArrayBuffer, signature: ArrayBuffer): Promise<boolean> {
-                let verified: boolean = false;
-                try {
-                    let rsaPssParams = {name: "RSA-PSS", saltLength: rsaCrypto.RSA_SALT_BYTE_CNT};
-                    verified = await window.crypto.subtle.verify(rsaPssParams, keys.public, signature, data);
-                } catch (ex) {
-                    return false;
-                }
-
-                return verified;
-            }
-        }
-    };
-}*/
+        return result.slice(0, j).buffer;
+    }
+}
 
 export namespace passmngr {
-    enum calg {
+    export enum calg {
         AES    = 0b00000001,
         CBC    = 0b00000010,
         GCM    = 0b00000100,
@@ -825,14 +432,14 @@ export namespace passmngr {
         ECDHE  = 0b00001000 << 8
     }
 
-    enum cryptoAlgos {
+    export enum cryptoAlgos {
         AES_CBC_256_HMAC_SHA256 = calg.AES | calg.CBC | calg.HMAC | calg.SHA256,
         AES_CBC_256_HMAC_SHA384 = calg.AES | calg.CBC | calg.HMAC | calg.SHA384,
         AES_CBC_256_HMAC_SHA512 = calg.AES | calg.CBC | calg.HMAC | calg.SHA512,
         AES_GCM_256_HMAC_SHA256 = calg.AES | calg.GCM | calg.HMAC | calg.SHA256,
         AES_GCM_256_HMAC_SHA384 = calg.AES | calg.GCM | calg.HMAC | calg.SHA384,
         AES_GCM_256_HMAC_SHA512 = calg.AES | calg.GCM | calg.HMAC | calg.SHA512,
-        ECDHE_P521 = calg.ECDHE | calg.P384,
+        ECDHE_P521 = calg.ECDHE | calg.P521,
         ECDHE_P384 = calg.ECDHE | calg.P384,
         ECDSA_P521_SHA256 = calg.ECDSA | calg.P521 | calg.SHA256,
         ECDSA_P521_SHA384 = calg.ECDSA | calg.P521 | calg.SHA384,
@@ -842,7 +449,7 @@ export namespace passmngr {
         ECDSA_P384_SHA512 = calg.ECDSA | calg.P384 | calg.SHA512
     }
 
-    type cryptoSymKeySet = {
+    export type cryptoSymKeySet = {
         algo: cryptoAlgos;
         sym: {
             encrypt: CryptoKey;
@@ -851,7 +458,7 @@ export namespace passmngr {
         salt: ArrayBuffer;
     }
 
-    type cryptoAsymKeySet = {
+    export type cryptoAsymKeySet = {
         algo: cryptoAlgos;
         asym: {
             public: CryptoKey;
@@ -860,13 +467,18 @@ export namespace passmngr {
         salt: ArrayBuffer;
     }
 
-    type cryptoKeySet = cryptoSymKeySet | cryptoAsymKeySet;
+    export type cryptoKeySet = cryptoSymKeySet | cryptoAsymKeySet;
 
-    function isSymmetric(keySet: cryptoKeySet): keySet is cryptoSymKeySet {
+    export function isSymmetric(keySet: cryptoKeySet): keySet is cryptoSymKeySet {
         return (keySet as cryptoSymKeySet).sym !== undefined;
     }
 
+<<<<<<< HEAD
     class crypto {
+=======
+    export class crypto {
+
+>>>>>>> 32656f7180733246170318c6d1a51d9d38d545ba
         static primitives = class cryptoPrimitives {
             static randomBytes (count: number): ArrayBuffer {
                 let buffer = new Uint8Array(count);
@@ -1262,7 +874,7 @@ export namespace passmngr {
         };
 
         static asymmetric = class asymmetricCrypto {
-            static ecdheBitsToDerive: number = 528;
+            static ecdheBitsToDerive: number = 256;
 
             static async sign (keys: cryptoKeySet, data: ArrayBuffer): Promise<ArrayBuffer> {
                 if (isSymmetric(keys)) {
@@ -1312,7 +924,7 @@ export namespace passmngr {
                 return verified;
             }
 
-            static async keyExchangeMarshshallPublic (keys: cryptoKeySet): Promise<ArrayBuffer> {
+            static async keyExchangeMarshallPublic (keys: cryptoKeySet): Promise<ArrayBuffer> {
                 if (isSymmetric(keys)) {
                     return null;
                 }
@@ -1354,7 +966,7 @@ export namespace passmngr {
                 if (dataArr.length < saltLength + 4) {
                     return null;
                 }
-                let keyLength = ((dataArr[2 + saltLength] >> 8) | dataArr[3 + saltLength]);
+                let keyLength = ((dataArr[2 + saltLength] << 8) | dataArr[3 + saltLength]);
                 if (dataArr.length < saltLength + keyLength + 4) {
                     return null;
                 }
