@@ -304,7 +304,7 @@ export class stringEncoding {
     }
 }
 
-export class algos {
+/*export class algos {
     static smallPrimes: Uint32Array = new Uint32Array([2,3,5,7,11,13,17,19,23,29]);
     static primeIndices: Uint32Array = new Uint32Array([1,7,11,13,17,19,23,29]);
     static isPrime (y: number): boolean {
@@ -806,7 +806,7 @@ export class crypto {
             }
         }
     };
-}
+}*/
 
 export namespace passmngr {
     enum calg {
@@ -867,7 +867,6 @@ export namespace passmngr {
     }
 
     class crypto {
-
         static primitives = class cryptoPrimitives {
             static randomBytes (count: number): ArrayBuffer {
                 let buffer = new Uint8Array(count);
@@ -890,8 +889,8 @@ export namespace passmngr {
                 u32[2] = y;
 
                 // Check all of the small primes
-                for (let i = 0; i < algos.smallPrimes.length; ++i) {
-                    u32[1] = algos.smallPrimes[i];
+                for (let i = 0; i < cryptoPrimitives.smallPrimes.length; ++i) {
+                    u32[1] = cryptoPrimitives.smallPrimes[i];
                     u32[0] = u32[2] / u32[1];
                     if (u32[0] < u32[1]) return true;
                     if (u32[2] == u32[0] * u32[1]) return false;
@@ -957,31 +956,31 @@ export namespace passmngr {
             }
         
             static nextPrime (n: number): number {
-                const small_primes = algos.smallPrimes;
-                const indices = algos.primeIndices;
+                const small_primes = cryptoPrimitives.smallPrimes;
+                const indices = cryptoPrimitives.primeIndices;
         
                 const L = 30;
-                const N = algos.smallPrimes.length;
+                const N = cryptoPrimitives.smallPrimes.length;
                 // If n is small enough, search in small_primes
-                if (n <= algos.smallPrimes[N-1]) {
-                    return algos.smallPrimes[algos.lowerBound(algos.smallPrimes, n)];
+                if (n <= cryptoPrimitives.smallPrimes[N-1]) {
+                    return cryptoPrimitives.smallPrimes[cryptoPrimitives.lowerBound(cryptoPrimitives.smallPrimes, n)];
                 }
                 // Else n > largest small_primes
                 // Start searching list of potential primes: L * k0 + indices[in]
-                const M = algos.primeIndices.length;
+                const M = cryptoPrimitives.primeIndices.length;
                 // Select first potential prime >= n
                 //   Known a-priori n >= L
                 let k0 = (n / L) | 0; // Coerce to Uint32
-                let inn = algos.lowerBound(algos.primeIndices, n - k0 * L);
-                n = L * k0 + algos.primeIndices[inn];
-                while (!algos.isPrime(n))
+                let inn = cryptoPrimitives.lowerBound(cryptoPrimitives.primeIndices, n - k0 * L);
+                n = L * k0 + cryptoPrimitives.primeIndices[inn];
+                while (!cryptoPrimitives.isPrime(n))
                 {
                     if (++inn == M)
                     {
                         ++k0;
                         inn = 0;
                     }
-                    n = L * k0 + algos.primeIndices[inn];
+                    n = L * k0 + cryptoPrimitives.primeIndices[inn];
                 }
                 return n;
             }
