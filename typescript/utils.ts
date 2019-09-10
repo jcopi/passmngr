@@ -1,309 +1,3 @@
-export class bufferEncoding {
-    static toBase64 (buffer: ArrayBuffer): string {
-        let result = "";
-        let encoding = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-        let padding  = "=";
-
-        let bytes = new Uint8Array(buffer);
-        let remainder = buffer.byteLength % 3;
-        let mainlen = buffer.byteLength - remainder;
-
-        for (let i = 0; i < mainlen; i += 3) {
-            let word = (bytes[i] << 16) | (bytes[i+1] << 8) | bytes[i+2];
-            result += encoding[(word & 0b111111000000000000000000) >> 18];
-            result += encoding[(word & 0b000000111111000000000000) >> 12];
-            result += encoding[(word & 0b000000000000111111000000) >>  6];
-            result += encoding[(word & 0b000000000000000000111111)];
-        }
-        if (remainder == 2) {
-            let word = (bytes[mainlen] << 8) | bytes[mainlen+1];
-            result += encoding[(word & 0b1111110000000000) >> 10];
-            result += encoding[(word & 0b0000001111110000) >>  4];
-            result += encoding[(word & 0b0000000000001111) <<  2];
-            result += padding;
-        } else if (remainder == 1) {
-            let word = bytes[mainlen];
-            result += encoding[(word & 0b11111100) >> 2];
-            result += encoding[(word & 0b00000011) << 4];
-            result += padding;
-            result += padding;
-        }
-
-        return result;
-    }
-    static fromBase64 (b64: string): ArrayBuffer {
-        let encodings = {"0":52,"1":53,"2":54,"3":55,"4":56,"5":57,"6":58,"7":59,"8":60,"9":61,"A":0,"B":1,"C":2,"D":3,"E":4,"F":5,
-		"G":6,"H":7,"I":8,"J":9,"K":10,"L":11,"M":12,"N":13,"O":14,"P":15,"Q":16,"R":17,"S":18,"T":19,"U":20,"V":21,"W":22,"X":23,"Y":24,"Z":25,"a":26,"b":27,"c":28,"d":29,"e":30,"f":31,"g":32,"h":33,"i":34,"j":35,"k":36,"l":37,"m":38,"n":39,"o":40,
-        "p":41,"q":42,"r":43,"s":44,"t":45,"u":46,"v":47,"w":48,"x":49,"y":50,"z":51,"+":62,"/":63};
-    
-        let remainder = b64.length % 4;
-        if (remainder > 0)
-            throw "Invalid padding on base64 string";
-        let lastChunkBCnt = (b64.endsWith("=") ? (b64.endsWith("==") ? 1 : 2) : 0);
-        let mainlen = b64.length - (lastChunkBCnt === 0 ? 0 : 4);
-        let nbytes = ((mainlen / 4) * 3) + lastChunkBCnt;
-        let bytes = new Uint8Array(nbytes);
-
-        let j = 0;
-        for (let i = 0; i < mainlen; i += 4) {
-            let word = (encodings[b64[i]] << 18) | (encodings[b64[i+1]] << 12) | (encodings[b64[i+2]] << 6) | encodings[b64[i+3]];
-            bytes[j++] = (word & 0b111111110000000000000000) >> 16;
-            bytes[j++] = (word & 0b000000001111111100000000) >> 8;
-            bytes[j++] = (word & 0b000000000000000011111111);
-        }
-
-        if (lastChunkBCnt === 1) {
-            let word = (encodings[b64[mainlen]] << 2) | (encodings[b64[mainlen+1]] >> 4);
-            bytes[j++] = word;
-        } else if (lastChunkBCnt === 2) {
-            let word = (encodings[b64[mainlen]] << 10) | (encodings[b64[mainlen+1]] << 4) | (encodings[b64[mainlen+2]] >>2);
-            bytes[j++] = (word & 0b1111111100000000) >> 8;
-            bytes[j++] = (word & 0b0000000011111111);
-        }
-
-        return bytes.buffer;
-    }
-}
-
-export type BERObject = {
-    class: number;
-    tag: number;
-    tagName: string;
-    structured: boolean;
-    rawContents: ArrayBuffer;
-    contents: BERObject[];
-    length: number;
-}
-
-export class berEncoding {
-    static TAG_BOOLEAN             : number = 1;
-    static TAG_INTEGER             : number = 2;
-    static TAG_BIT_STRING          : number = 3;
-    static TAG_OCTET_STRING        : number = 4;
-    static TAG_NULL                : number = 5;
-    static TAG_OBJECT_IDENTIFIER   : number = 6;
-    static TAG_OBJECT_DESCRIPTOR   : number = 7;
-    static TAG_INSTANCE_OF_EXTERNAL: number = 8;
-    static TAG_REAL                : number = 9;
-    static TAG_ENUMERATED          : number = 10;
-    static TAG_EMBEDDED_PDV        : number = 11;
-    static TAG_UTF8_STRING         : number = 12;
-    static TAG_RELATIVE_OID        : number = 13;
-    static TAG_SEQUENCE_OF         : number = 16;
-    static TAG_SET_OF              : number = 17;
-    static TAG_NUMERIC_STRING      : number = 18;
-    static TAG_PRINTABLE_STRING    : number = 19;
-    static TAG_T61_STRING          : number = 20;
-    static TAG_VIDEOTEX_STRING     : number = 21;
-    static TAG_IA5_STRING          : number = 22;
-    static TAG_UTC_TIME            : number = 23;
-    static TAG_GENERALIZED_TIME    : number = 24;
-    static TAG_GRAPHIC_STRING      : number = 25;
-    static TAG_ISO646_STRING       : number = 26;
-    static TAG_GENERAL_STRING      : number = 27;
-    static TAG_UNIVERSAL_STRING    : number = 28;
-    static TAG_CHARACTER_STRING    : number = 29;
-    static TAG_BMP_STRING          : number = 30;
-
-    static TAG_NAMES = {1: "BOOLEAN",2: "INTEGER",3: "BIT_STRING",4: "OCTET_STRING",5: "NULL",6: "OBJECT_IDENTIFIER",7: "OBJECT_DESCRIPTOR",8: "_INSTANCE_OF_EXTERNAL",9: "_REAL",10: "_ENUMERATED",11: "_EMBEDDED_PDV",12: "_UTF8_STRING",13: "_RELATIVE_OID",16: "_SEQUENCE_OF",17: "_SET_OF",18: "_NUMERIC_STRING",19: "_PRINTABLE_STRING",20: "_T61_STRING",21: "_VIDEOTEX_STRING",22: "_IA5_STRING",23: "_UTC_TIME",24: "_GENERALIZED_TIME",25: "_GRAPHIC_STRING",26: "_ISO646_STRING",27: "_GENERAL_STRING",28: "UNIVERSAL_STRING",29: "CHARACTER_STRING",30: "BMP_STRING"}
-
-    static fromBer (data: ArrayBuffer): BERObject[] {
-        let dataArr = new Uint8Array(data);
-        let result: BERObject[] = [];
-
-        let i = 0; // a buffer could contain many BER encoded objects
-        while (i < dataArr.length) {
-            // The first 2 bits of the first byte are an objects' class
-            let cls = (dataArr[i] & 0b11000000) >> 6;
-            // The 3rd bit indicated whether the data is structured
-            let structured = (dataArr[i] & 0b00100000) === 0b00100000;
-            // The next 5+ bytes represent the object's tag
-            let tag = (dataArr[i] & 0b00011111);
-            if (tag === 0b00011111) {
-                // If the first 5 tag bits are all 1 the tag is made up of the following bytes
-                // until a byte with a leading 0 is found. 
-                tag = 0;
-                for (i++; i < dataArr.length; i++) {
-                    tag *= 128;
-                    tag += Number(dataArr[i] & 0b01111111);
-                    if ((dataArr[i] & 0b10000000) !== 0b10000000) {
-                        i++;
-                        break;
-                    }
-                }
-                if (i >= dataArr.length) throw "Invalid BER format not enough bytes";
-                if (!Number.isSafeInteger(tag)) throw "Tag too large";
-            } else {
-                i++;
-            }
-
-            let length = dataArr[i];
-            if (length === 0b10000000) {
-                // The length is unknown, so it must be found while parsing the contents
-                // it will be set to '-1' here and dealt with later
-                length = -1;
-                i++;
-            } else if (length > 128) {
-                let lenBytes = (length & 0b01111111);
-                length = 0;
-                for (i++; i < dataArr.length && lenBytes-- > 0; i++) {
-                    length *= 256;
-                    length += dataArr[i];
-                }
-                if (i >= dataArr.length) throw "Invalid BER format not enough bytes";
-                if (!Number.isSafeInteger(length)) throw "Length too large"; 
-            } else {
-                i++;
-            }
-
-            let raw: Uint8Array = null;
-            if (length <= 0) {
-                // Content will end at the first set of adjacent 0 bytes, length is unknown.
-                let cnt = [];
-                while (i + 1 < dataArr.length) {
-                    if (dataArr[i] === 0 && dataArr[i + 1] === 0) {
-                        i += 2;
-                        break;
-                    } else {
-                        cnt.push(dataArr[i]);
-                        i++;
-                    }
-                }
-                raw = new Uint8Array(cnt);
-                length = raw.length;
-            } else {
-                raw = dataArr.slice(i, i + length);
-                i += length;
-            }
-
-            let content = null;
-            if (structured) {
-                content = berEncoding.fromBer(raw);
-            }
-
-            let item: BERObject = {class: cls, tag: tag, tagName:(tag in berEncoding.TAG_NAMES ? berEncoding.TAG_NAMES[tag] : "TAG_UNKNOWN"), structured: structured, rawContents: raw, contents: content, length: length};
-            result.push(item);
-        }
-
-
-
-        return result;
-    }
-}
-
-export class stringEncoding {
-    static toUTF8  (str: string): ArrayBuffer {
-        let tmp = [];
-        for (let i = 0, j = 0; i < str.length; ++i) {
-            let cp = str.codePointAt(i);
-            if (cp <= 0x0000007F) {
-                tmp.push(cp);
-            } else if (cp <= 0x000007FF) {
-                tmp.push(0xC0 | ((cp & 0x7C0) >> 6));
-                tmp.push(0x80 | (cp & 0x3F))
-            } else if (cp <= 0x0000FFFF) {
-                tmp.push(0xE0 | ((cp & 0xF000) >> 12));
-                tmp.push(0x80 | ((cp & 0xFC0) >> 6));
-                tmp.push(0x80 | (cp & 0x3F));
-            } else if (cp <= 0x001FFFFF) {
-                tmp.push(0xF0 | ((cp & 0x1C0000) >> 18));
-                tmp.push(0x80 | ((cp & 0x3F000) >> 12));
-                tmp.push(0x80 | ((cp & 0xFC0) >> 6));
-                tmp.push(0x80 | (cp & 0x3F));
-            }
-        }
-        let bytes = new Uint8Array(tmp);
-        return bytes.buffer;
-    }
-    static toUTF16 (str: string): ArrayBuffer {
-        let tmp = [];
-        for (let i = 0; i < str.length; ++i) {
-            let cp = str.codePointAt(i);
-            if (cp <= 0xD7FF || (cp >= 0xE000 && cp <= 0xFFFF)) {
-                tmp.push(cp);
-            } else if (cp >= 0x10000 && cp < 0x10FFFF) {
-                cp -= 0x10000;
-                tmp.push(0xD800 | ((cp & 0xFFC00) >> 10));
-                tmp.push(0xDC00 | (cp & 0x3FF));
-            }
-        }
-        let words = new Uint16Array(tmp);
-        return words.buffer;
-    }
-    static toUTF32 (str: string): ArrayBuffer {
-        let result = new Uint32Array(str.length);
-        for (let i = 0; i < str.length; ++i) {
-            result[i] = str.codePointAt(i);
-        }
-        return result.buffer;
-    }
-    static fromUTF8 (buffer: ArrayBuffer): string {
-        let result = "";
-        let u8 = new Uint8Array(buffer);
-        for (let i = 0; i < u8.length; ++i) {
-            if (u8[i] <= 0x7F) {
-                result += String.fromCodePoint(u8[i]);
-            } else if ((u8[i] >> 5) == 0x6) {
-                // The next bytes should be part of this Unicode Code Point
-                if (u8.length < (i + 2))
-                    break;
-                if ((u8[i+1] >> 6) == 0x2) {
-                    let cp = ((u8[i] & 0x1F) << 6) | (u8[i+1] & 0x3F);
-                    result += String.fromCodePoint(cp);
-                    ++i;
-                }
-            } else if ((u8[i] >> 4) == 0xE) {
-                // The next bytes should be part of this Unicode Code Point
-                if (u8.length < (i + 3))
-                    break;
-                if (((u8[i+1] >> 6) == 0x2) && ((u8[i+2] >> 6) == 0x2)) {
-                    let cp = ((u8[i] & 0xF) << 12) | ((u8[i+1] & 0x3F) << 6) | (u8[i+2] & 0x3F);
-                    result += String.fromCodePoint(cp);
-                    i += 2;
-                }
-            } else if ((u8[i] >> 3) == 0xF) {
-                // The next bytes should be part of this Unicode Code Point
-                if (u8.length < (i + 4))
-                    break;
-                if (((u8[i+1] >> 6) == 0x2) && ((u8[i+2] >> 6) == 0x2) && ((u8[i+3] >> 6) == 0x2)) {
-                    let cp = ((u8[i] & 0x7) << 18) | ((u8[i+1] & 0x3F) << 12) | ((u8[i+2] & 0x3F) << 6) | (u8[i+3] & 0x3F);
-                    result += String.fromCodePoint(cp);
-                    i += 3;
-                }
-            }
-        }
-
-        return result;
-    }
-    static fromUTF16 (buffer: ArrayBuffer): string {
-        let result = "";
-        let u16 = new Uint16Array(buffer);
-        for (let i = 0; i < u16.length; i++) {
-            if (u16[i] < 0xD800 || u16[i] >= 0xE000) {
-                result += String.fromCodePoint(u16[i]);
-            } else {
-                if (u16.length < (i + 2))
-                    break;
-                if (((u16[i] >> 10) == 0x36) && ((u16[i+1] >> 10) == 0x37)) {
-                    let cp = ((u16[i] & 0x3FF) << 10) | (u16[i+1] & 0x3ff);
-                    cp += 0x10000;
-                    result += String.fromCodePoint(cp);
-                }
-            }
-        }
-        return result;
-    }
-    static fromUTF32 (buffer: ArrayBuffer): string {
-        let result = "";
-        let u32 = new Uint32Array(buffer);
-        for (let i = 0; i < u32.length; ++i) {
-            result += String.fromCodePoint(u32[i]);
-        }
-
-        return result;
-    }
-}
-
 declare global {
     interface Uint8Array {
         setBit(index: number, value: number): void;
@@ -337,85 +31,267 @@ Uint8Array.prototype.getBit = function (index: number): number {
     return value;
 }
 
-type entropyEncodeModel = {
-    decode: Uint8Array;
-    encode: Map<number, number>;
-}
 
-export class compress {
-    static jsonEntropyModel: entropyEncodeModel = {
-        decode: new Uint8Array(stringEncoding.toUTF8("{:\",}/e sltrano-")),
-        encode: new Map(["{",":","\"",",","}","/","e"," ","s","l","t","r","a","n","o","-"].map((v, i) => [v.charCodeAt(0),i]))
-    };
-
-    
-    static entropyEncode (model: entropyEncodeModel, data: ArrayBuffer): ArrayBuffer {
-        let input = new Uint8Array(data);
-        let result = new Uint8Array(Math.ceil((9/8) * input.length));
-        let j = 0;
-        
-        for (let i = 0; i < input.length; i++) {
-            let replacement = model.encode.get(input[i]);
-            if (replacement !== undefined) {
-                result.setBit(j++, 1);
-                result.setBit(j++, (replacement & 0b1000) >> 3);
-                result.setBit(j++, (replacement & 0b0100) >> 2);
-                result.setBit(j++, (replacement & 0b0010) >> 1);
-                result.setBit(j++, replacement & 0b0001);
-            } else {
-                result.setBit(j++, 0);
-                result.setBit(j++, (input[i] & 0b10000000) >> 7);
-                result.setBit(j++, (input[i] & 0b01000000) >> 6);
-                result.setBit(j++, (input[i] & 0b00100000) >> 5);
-                result.setBit(j++, (input[i] & 0b00010000) >> 4);
-                result.setBit(j++, (input[i] & 0b00001000) >> 3);
-                result.setBit(j++, (input[i] & 0b00000100) >> 2);
-                result.setBit(j++, (input[i] & 0b00000010) >> 1);
-                result.setBit(j++,  input[i] & 0b00000001);
-            }
-        }
-
-        return result.slice(0, (j >> 3) + Math.min(1, j & 0b111)).buffer;
-    };
-
-    static entropyDecode (model: entropyEncodeModel, data: ArrayBuffer): ArrayBuffer {
-        let input = new Uint8Array(data);
-        let result = new Uint8Array(Math.ceil((8/5) * input.length));
-        let j = 0;
-
-        for (let i = 0; i < input.length << 3;) {
-            if (input.getBit(i++) === 1) {
-                let num = 0;
-                num |= input.getBit(i++) << 3;
-                num |= input.getBit(i++) << 2;
-                num |= input.getBit(i++) << 1;
-                num |= input.getBit(i++);
-
-                result[j++] = model.decode[num];
-            } else {
-                if (i + 8 > input.length << 3) {
-                    break;
-                }
-
-                let num = 0;
-                num |= input.getBit(i++) << 7;
-                num |= input.getBit(i++) << 6;
-                num |= input.getBit(i++) << 5;
-                num |= input.getBit(i++) << 4;
-                num |= input.getBit(i++) << 3;
-                num |= input.getBit(i++) << 2;
-                num |= input.getBit(i++) << 1;
-                num |= input.getBit(i++);
-
-                result[j++] = num;
-            }
-        }
-
-        return result.slice(0, j).buffer;
-    }
-}
 
 export namespace passmngr {
+    export class bufferEncoding {
+        static toBase64 (buffer: ArrayBuffer): string {
+            let result = "";
+            let encoding = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            let padding  = "=";
+    
+            let bytes = new Uint8Array(buffer);
+            let remainder = buffer.byteLength % 3;
+            let mainlen = buffer.byteLength - remainder;
+    
+            for (let i = 0; i < mainlen; i += 3) {
+                let word = (bytes[i] << 16) | (bytes[i+1] << 8) | bytes[i+2];
+                result += encoding[(word & 0b111111000000000000000000) >> 18];
+                result += encoding[(word & 0b000000111111000000000000) >> 12];
+                result += encoding[(word & 0b000000000000111111000000) >>  6];
+                result += encoding[(word & 0b000000000000000000111111)];
+            }
+            if (remainder == 2) {
+                let word = (bytes[mainlen] << 8) | bytes[mainlen+1];
+                result += encoding[(word & 0b1111110000000000) >> 10];
+                result += encoding[(word & 0b0000001111110000) >>  4];
+                result += encoding[(word & 0b0000000000001111) <<  2];
+                result += padding;
+            } else if (remainder == 1) {
+                let word = bytes[mainlen];
+                result += encoding[(word & 0b11111100) >> 2];
+                result += encoding[(word & 0b00000011) << 4];
+                result += padding;
+                result += padding;
+            }
+    
+            return result;
+        }
+        static fromBase64 (b64: string): ArrayBuffer {
+            let encodings = {"0":52,"1":53,"2":54,"3":55,"4":56,"5":57,"6":58,"7":59,"8":60,"9":61,"A":0,"B":1,"C":2,"D":3,"E":4,"F":5,
+            "G":6,"H":7,"I":8,"J":9,"K":10,"L":11,"M":12,"N":13,"O":14,"P":15,"Q":16,"R":17,"S":18,"T":19,"U":20,"V":21,"W":22,"X":23,"Y":24,"Z":25,"a":26,"b":27,"c":28,"d":29,"e":30,"f":31,"g":32,"h":33,"i":34,"j":35,"k":36,"l":37,"m":38,"n":39,"o":40,
+            "p":41,"q":42,"r":43,"s":44,"t":45,"u":46,"v":47,"w":48,"x":49,"y":50,"z":51,"+":62,"/":63};
+        
+            let remainder = b64.length % 4;
+            if (remainder > 0)
+                throw "Invalid padding on base64 string";
+            let lastChunkBCnt = (b64.endsWith("=") ? (b64.endsWith("==") ? 1 : 2) : 0);
+            let mainlen = b64.length - (lastChunkBCnt === 0 ? 0 : 4);
+            let nbytes = ((mainlen / 4) * 3) + lastChunkBCnt;
+            let bytes = new Uint8Array(nbytes);
+    
+            let j = 0;
+            for (let i = 0; i < mainlen; i += 4) {
+                let word = (encodings[b64[i]] << 18) | (encodings[b64[i+1]] << 12) | (encodings[b64[i+2]] << 6) | encodings[b64[i+3]];
+                bytes[j++] = (word & 0b111111110000000000000000) >> 16;
+                bytes[j++] = (word & 0b000000001111111100000000) >> 8;
+                bytes[j++] = (word & 0b000000000000000011111111);
+            }
+    
+            if (lastChunkBCnt === 1) {
+                let word = (encodings[b64[mainlen]] << 2) | (encodings[b64[mainlen+1]] >> 4);
+                bytes[j++] = word;
+            } else if (lastChunkBCnt === 2) {
+                let word = (encodings[b64[mainlen]] << 10) | (encodings[b64[mainlen+1]] << 4) | (encodings[b64[mainlen+2]] >>2);
+                bytes[j++] = (word & 0b1111111100000000) >> 8;
+                bytes[j++] = (word & 0b0000000011111111);
+            }
+    
+            return bytes.buffer;
+        }
+    }
+    
+    export class stringEncoding {
+        static toUTF8  (str: string): ArrayBuffer {
+            let tmp = [];
+            for (let i = 0, j = 0; i < str.length; ++i) {
+                let cp = str.codePointAt(i);
+                if (cp <= 0x0000007F) {
+                    tmp.push(cp);
+                } else if (cp <= 0x000007FF) {
+                    tmp.push(0xC0 | ((cp & 0x7C0) >> 6));
+                    tmp.push(0x80 | (cp & 0x3F))
+                } else if (cp <= 0x0000FFFF) {
+                    tmp.push(0xE0 | ((cp & 0xF000) >> 12));
+                    tmp.push(0x80 | ((cp & 0xFC0) >> 6));
+                    tmp.push(0x80 | (cp & 0x3F));
+                } else if (cp <= 0x001FFFFF) {
+                    tmp.push(0xF0 | ((cp & 0x1C0000) >> 18));
+                    tmp.push(0x80 | ((cp & 0x3F000) >> 12));
+                    tmp.push(0x80 | ((cp & 0xFC0) >> 6));
+                    tmp.push(0x80 | (cp & 0x3F));
+                }
+            }
+            let bytes = new Uint8Array(tmp);
+            return bytes.buffer;
+        }
+        static toUTF16 (str: string): ArrayBuffer {
+            let tmp = [];
+            for (let i = 0; i < str.length; ++i) {
+                let cp = str.codePointAt(i);
+                if (cp <= 0xD7FF || (cp >= 0xE000 && cp <= 0xFFFF)) {
+                    tmp.push(cp);
+                } else if (cp >= 0x10000 && cp < 0x10FFFF) {
+                    cp -= 0x10000;
+                    tmp.push(0xD800 | ((cp & 0xFFC00) >> 10));
+                    tmp.push(0xDC00 | (cp & 0x3FF));
+                }
+            }
+            let words = new Uint16Array(tmp);
+            return words.buffer;
+        }
+        static toUTF32 (str: string): ArrayBuffer {
+            let result = new Uint32Array(str.length);
+            for (let i = 0; i < str.length; ++i) {
+                result[i] = str.codePointAt(i);
+            }
+            return result.buffer;
+        }
+        static fromUTF8 (buffer: ArrayBuffer): string {
+            let result = "";
+            let u8 = new Uint8Array(buffer);
+            for (let i = 0; i < u8.length; ++i) {
+                if (u8[i] <= 0x7F) {
+                    result += String.fromCodePoint(u8[i]);
+                } else if ((u8[i] >> 5) == 0x6) {
+                    // The next bytes should be part of this Unicode Code Point
+                    if (u8.length < (i + 2))
+                        break;
+                    if ((u8[i+1] >> 6) == 0x2) {
+                        let cp = ((u8[i] & 0x1F) << 6) | (u8[i+1] & 0x3F);
+                        result += String.fromCodePoint(cp);
+                        ++i;
+                    }
+                } else if ((u8[i] >> 4) == 0xE) {
+                    // The next bytes should be part of this Unicode Code Point
+                    if (u8.length < (i + 3))
+                        break;
+                    if (((u8[i+1] >> 6) == 0x2) && ((u8[i+2] >> 6) == 0x2)) {
+                        let cp = ((u8[i] & 0xF) << 12) | ((u8[i+1] & 0x3F) << 6) | (u8[i+2] & 0x3F);
+                        result += String.fromCodePoint(cp);
+                        i += 2;
+                    }
+                } else if ((u8[i] >> 3) == 0xF) {
+                    // The next bytes should be part of this Unicode Code Point
+                    if (u8.length < (i + 4))
+                        break;
+                    if (((u8[i+1] >> 6) == 0x2) && ((u8[i+2] >> 6) == 0x2) && ((u8[i+3] >> 6) == 0x2)) {
+                        let cp = ((u8[i] & 0x7) << 18) | ((u8[i+1] & 0x3F) << 12) | ((u8[i+2] & 0x3F) << 6) | (u8[i+3] & 0x3F);
+                        result += String.fromCodePoint(cp);
+                        i += 3;
+                    }
+                }
+            }
+    
+            return result;
+        }
+        static fromUTF16 (buffer: ArrayBuffer): string {
+            let result = "";
+            let u16 = new Uint16Array(buffer);
+            for (let i = 0; i < u16.length; i++) {
+                if (u16[i] < 0xD800 || u16[i] >= 0xE000) {
+                    result += String.fromCodePoint(u16[i]);
+                } else {
+                    if (u16.length < (i + 2))
+                        break;
+                    if (((u16[i] >> 10) == 0x36) && ((u16[i+1] >> 10) == 0x37)) {
+                        let cp = ((u16[i] & 0x3FF) << 10) | (u16[i+1] & 0x3ff);
+                        cp += 0x10000;
+                        result += String.fromCodePoint(cp);
+                    }
+                }
+            }
+            return result;
+        }
+        static fromUTF32 (buffer: ArrayBuffer): string {
+            let result = "";
+            let u32 = new Uint32Array(buffer);
+            for (let i = 0; i < u32.length; ++i) {
+                result += String.fromCodePoint(u32[i]);
+            }
+    
+            return result;
+        }
+    }
+    
+    type entropyEncodeModel = {
+        decode: Uint8Array;
+        encode: Map<number, number>;
+    }
+    
+    export class compress {
+        static jsonEntropyModel: entropyEncodeModel = {
+            decode: new Uint8Array(stringEncoding.toUTF8("{:\",}/e sltrano-")),
+            encode: new Map(["{",":","\"",",","}","/","e"," ","s","l","t","r","a","n","o","-"].map((v, i) => [v.charCodeAt(0),i]))
+        };
+    
+        
+        static entropyEncode (model: entropyEncodeModel, data: ArrayBuffer): ArrayBuffer {
+            let input = new Uint8Array(data);
+            let result = new Uint8Array(Math.ceil((9/8) * input.length));
+            let j = 0;
+            
+            for (let i = 0; i < input.length; i++) {
+                let replacement = model.encode.get(input[i]);
+                if (replacement !== undefined) {
+                    result.setBit(j++, 1);
+                    result.setBit(j++, (replacement & 0b1000) >> 3);
+                    result.setBit(j++, (replacement & 0b0100) >> 2);
+                    result.setBit(j++, (replacement & 0b0010) >> 1);
+                    result.setBit(j++, replacement & 0b0001);
+                } else {
+                    result.setBit(j++, 0);
+                    result.setBit(j++, (input[i] & 0b10000000) >> 7);
+                    result.setBit(j++, (input[i] & 0b01000000) >> 6);
+                    result.setBit(j++, (input[i] & 0b00100000) >> 5);
+                    result.setBit(j++, (input[i] & 0b00010000) >> 4);
+                    result.setBit(j++, (input[i] & 0b00001000) >> 3);
+                    result.setBit(j++, (input[i] & 0b00000100) >> 2);
+                    result.setBit(j++, (input[i] & 0b00000010) >> 1);
+                    result.setBit(j++,  input[i] & 0b00000001);
+                }
+            }
+    
+            return result.slice(0, (j >> 3) + Math.min(1, j & 0b111)).buffer;
+        };
+    
+        static entropyDecode (model: entropyEncodeModel, data: ArrayBuffer): ArrayBuffer {
+            let input = new Uint8Array(data);
+            let result = new Uint8Array(Math.ceil((8/5) * input.length));
+            let j = 0;
+    
+            for (let i = 0; i < input.length << 3;) {
+                if (input.getBit(i++) === 1) {
+                    let num = 0;
+                    num |= input.getBit(i++) << 3;
+                    num |= input.getBit(i++) << 2;
+                    num |= input.getBit(i++) << 1;
+                    num |= input.getBit(i++);
+    
+                    result[j++] = model.decode[num];
+                } else {
+                    if (i + 8 > input.length << 3) {
+                        break;
+                    }
+    
+                    let num = 0;
+                    num |= input.getBit(i++) << 7;
+                    num |= input.getBit(i++) << 6;
+                    num |= input.getBit(i++) << 5;
+                    num |= input.getBit(i++) << 4;
+                    num |= input.getBit(i++) << 3;
+                    num |= input.getBit(i++) << 2;
+                    num |= input.getBit(i++) << 1;
+                    num |= input.getBit(i++);
+    
+                    result[j++] = num;
+                }
+            }
+    
+            return result.slice(0, j).buffer;
+        }
+    }
+
     export enum calg {
         AES    = 0b00000001,
         CBC    = 0b00000010,
@@ -473,12 +349,8 @@ export namespace passmngr {
         return (keySet as cryptoSymKeySet).sym !== undefined;
     }
 
-<<<<<<< HEAD
-    class crypto {
-=======
     export class crypto {
 
->>>>>>> 32656f7180733246170318c6d1a51d9d38d545ba
         static primitives = class cryptoPrimitives {
             static randomBytes (count: number): ArrayBuffer {
                 let buffer = new Uint8Array(count);
