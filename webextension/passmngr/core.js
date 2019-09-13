@@ -311,7 +311,7 @@ class encryption {
         return {aes: aesKey, hmac: hmacKey};
     };
 
-    static async randomBytes (count) {
+    static randomBytes (count) {
         // Validate input
         if (typeof count !== "number" || count <= 0) {
             throw "Invalid input. 1st argument of encryption.randomBytes must be a number between 1 and Inf";
@@ -329,15 +329,46 @@ class encryption {
 };
 
 class passwords {
-    static fastRange8 (byte, range) {
-        vals = new Uint16Array(2);
-        vals[0] = byte;
-        vals[1] = range;
+    static byteDivision (bytes, byte) {
+        let u8 = new Uint8Array(bytes);
+        let result = new Uint8Array(u8.length);
+        let u16 = new Uint16Array(3);
+        for (let i = 0; i < u8.length; i++) {
+            // The value to operate on next is the previous remainder * 256 + current digit
+            u16[0] = (u16[1] << 8) + u8[i];
+            // The quotient u16[2] and remainder u16[1] are calculated
+            u16[2] = u16[0] / byte;
+            u16[1] = u16[0] - (u16[2] * byte);
 
-        return (vals[0] * vals[1]) >> 8;
-    };
+            result[i] = u16[2];
+        }
+
+        let leadingZeroCount = 0;
+        for (let i = 0; i < result.length; i++) {
+            if (result[i] === 0) {
+                leadingZeroCount++;
+            } else {
+                break;
+            }
+        }
+
+        return {q: result.slice(leadingZeroCount), r: u16[1]};
+    }
     static fromBytes (bytes, dictionary) {
-        
+        let result = "";
+        let u8 = new Uint8Array(bytes);
+        while (u8.length > 0) {
+            let qr = passwords.byteDivision(u8, dictionary.length);
+            result += dictionary[qr.r];
+            u8 = qr.q;
+        }
+
+        let bits = Math.log2(dictionary.length);
+        while (result.length * bits < u8.length * 8) {
+            result = dictionary[0] + result;
+        }
+
+        return result;
     };
 };
 
