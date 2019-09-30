@@ -1,13 +1,10 @@
-function openPage () {
-    let page = {
-        type: "detached_panel",
-        url: "index.html",
-        titlePreface: "passmngr",
-        width: 600,
-        height: 600
-    };
+if (!browser) var browser = chrome;
 
-    let panel = browser.windows.create(page);
+var application = {
+    state: null,
+    keysets: {}
 }
 
-browser.browserAction.onClicked.addListener(openPage);
+browser.runtime.onMessage.addListener(function (message, sender, sendMessage) {
+    
+});

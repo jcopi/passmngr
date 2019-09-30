@@ -353,7 +353,7 @@ class passwords {
         }
 
         return {q: result.slice(leadingZeroCount), r: u16[1]};
-    }
+    };
     static fromBytes (bytes, dictionary) {
         let result = "";
         let u8 = new Uint8Array(bytes);
@@ -372,6 +372,9 @@ class passwords {
     };
 };
 
+passwords.ALPHANUMERIC = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+passwords.DEFAULT = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789`~!@#$%^&*_+=|;:/?.>,<";
+
 encryption.ALGORITHM = "AES-256-CBC_HMAC-SHA-384";
 encryption.PBKDF2_ITERATIONS = 4194369;
 encryption.PBKDF2_HASH = "SHA-512";
@@ -382,3 +385,19 @@ encryption.AES_LENGTH = 256;
 encryption.AES_IV_LENGTH = 128 >> 3;
 encryption.HMAC_HASH = "SHA-384";
 encryption.HMAC_LENGTH = 382 >> 3;
+
+class appStates {};
+appStates.NOT_CONFIGURED = 0x00;
+appStates.CONFIGURED     = 0x01;
+appStates.LOCKED         = 0x02;
+appStates.UNLOCKED       = 0x03;
+
+appStates.CMD_GET_STATE  = 0x04;
+appStates.CMD_CONFIGURE  = 0x05;
+appStates.CMD_PASSWORD   = 0x06;
+appStates.CMD_LOCK       = 0x07;
+appStates.CMD_RESET      = 0x08;
+
+appStates.REQ_ADD_RECORD   = 0x09;
+appStates.REQ_GET_RECORD   = 0x10;
+appStates.REQ_GEN_PASSWORD = 0x11;

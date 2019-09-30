@@ -13,10 +13,11 @@
         "default_icon": {
             "38": "icons/button-38.png"
         }, 
-        "default_title": "passmngr"
+        "default_title": "passmngr",
+        "default_popup": "index.html"
     },
 
     "background": {
-        "scripts": ["background.js"]
+        "scripts": ["core.js", "background.js"]
     }
 }
