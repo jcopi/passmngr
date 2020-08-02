@@ -39,7 +39,7 @@ int getch() {
 
 #include <sodium.h>
 
-int main (int argc, char** argv) {
+int main2 (int argc, char** argv) {
 	/* The sequence for initializing the password manager is:
 		- Init Sodium 
 		- Allocate a locked buffer for the password and master encryption key
