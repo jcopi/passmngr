@@ -40,9 +40,11 @@ static int archive_populate_items (struct archive* ar)
     size_t rlen;
     uint16_t name_bytes;
     uint64_t item_bytes;
+    size_t hstart;
     int eof;
 
     do {
+        hstart = ftell(ar->file_stream);
         rlen = fread(&name_bytes, sizeof (name_bytes), 1, ar->file_stream);
         eof = feof(ar->file_stream);
 
@@ -75,6 +77,7 @@ static int archive_populate_items (struct archive* ar)
             return -1;
         }
         entity->start = ftell(ar->file_stream);
+        entity->header_start = hstart;
         entity->length = item_bytes;
 
         if (hm_set(&ar->entities, item_name, entity) != 0) {
@@ -93,12 +96,49 @@ static int archive_populate_items (struct archive* ar)
     return 0;
 }
 
-int archive_close (struct archive* ar);
+int archive_close (struct archive* ar)
+{
+    fclose(ar->file_stream);
+    ar->file_stream = NULL;
+    hm_destroy(&ar->entities);
+    return 0;
+}
 
-int archive_create_item (struct archive* ar, const char* name);
+int archive_create_item (struct archive* ar, const void* name, size_t name_bytes)
+{
+    if (ar->mode != WRITE || name_bytes > UINT16_MAX) {
+        return -1;
+    }
+
+    struct archive_entity* entity = calloc(1, sizeof (struct archive_entity));
+    if (entity == NULL) {
+        return -1;
+    }
+
+    entity->header_start = ftell(ar->file_stream);
+
+    uint16_t nbytes = name_bytes;
+    if (fwrite(&nbytes, sizeof (nbytes), 1, ar->file_stream) != sizeof (nbytes)) {
+        return -1;
+    }
+
+    if (fwrite(name, 1, name_bytes, ar->file_stream) != name_bytes) {
+        return -1;
+    }
+
+    uint64_t content_bytes = 0;
+    if (fwrite(&content_bytes, sizeof (content_bytes), 1, ar->file_stream) != sizeof (content_bytes)) {
+        return -1;
+    }
+    entity->start = ftell(ar->file_stream);
+    entity->length = 0;
+
+    hm_set_copy(ar->entities, name, name_bytes, entity);
+}
+
 int archive_write_item  (struct archive* ar, void* buffer, size_t buffer_bytes);
 int archive_close_item  (struct archive* ar);
 
-int archive_open_item  (struct archive* ar, const char* name);
+int archive_open_item  (struct archive* ar, const unsigned char* name, size_t name_bytes);
 int archive_read_item  (struct archive* ar, void* buffer, size_t buffer_bytes);
 int archive_close_item (struct archive* ar);
