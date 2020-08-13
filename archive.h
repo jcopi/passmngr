@@ -5,6 +5,7 @@
 
 struct archive_entity {
     size_t start;
+    size_t header_start;
     uint64_t length;
 };
 
@@ -24,11 +25,11 @@ int archive_create (struct archive* ar, const char* name);
 int archive_open   (struct archive* ar, const char* name);
 int archive_close  (struct archive* ar);
 
-int archive_create_item (struct archive* ar, const char* name);
+int archive_create_item (struct archive* ar, const void* name, size_t name_bytes);
 int archive_write_item  (struct archive* ar, void* buffer, size_t buffer_bytes);
 int archive_close_item  (struct archive* ar);
 
-int archive_open_item  (struct archive* ar, const char* name);
+int archive_open_item  (struct archive* ar, const void* name, size_t name_bytes);
 int archive_read_item  (struct archive* ar, void* buffer, size_t buffer_bytes);
 int archive_close_item (struct archive* ar);
 
