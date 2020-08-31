@@ -1,3 +1,0 @@
-[submodule "hashmap"]
-	path = hashmap
-	url = git@gitlab.copi.dev:jcopi/hashmap.git
