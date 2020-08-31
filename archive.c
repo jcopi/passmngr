@@ -3,6 +3,11 @@
 
 #define ARCHIVE_ITEM_NAME_MAXBYTES  (128)
 
+result_t(archive_t, archive_error_t) archive_create(const char* name)
+{
+    
+}
+
 int archive_init (struct archive* ar)
 {
     if (hm_init(&ar->entities) != 0) {
@@ -13,7 +18,7 @@ int archive_init (struct archive* ar)
     ar->file_stream = NULL;
     return 0;
 }
-int archive_create (struct archive* ar, const char* name)
+/*int archive_create (struct archive* ar, const char* name)
 {
     ar->mode = WRITE;
     ar->file_stream = fopen(name, "wb");
@@ -33,7 +38,7 @@ int archive_open (struct archive* ar, const char* name)
     }
 
     return archive_populate_items(ar);
-}
+}*/
 
 static int archive_populate_items (struct archive* ar)
 {
@@ -52,7 +57,7 @@ static int archive_populate_items (struct archive* ar)
             return -1;
         }
 
-        char* item_name = calloc(name_bytes + 1, sizeof (char));
+        char* item_name = calloc(name_bytes, sizeof (char));
         if (item_name == NULL) {
             return -1;
         }
@@ -133,7 +138,7 @@ int archive_create_item (struct archive* ar, const void* name, size_t name_bytes
     entity->start = ftell(ar->file_stream);
     entity->length = 0;
 
-    hm_set_copy(ar->entities, name, name_bytes, entity);
+    hm_set_copy(&ar->entities, name, name_bytes, entity);
 }
 
 int archive_write_item  (struct archive* ar, void* buffer, size_t buffer_bytes);
