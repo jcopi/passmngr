@@ -16,8 +16,9 @@ typedef enum archive_error {
     F_INDEX_PARSE_ERROR,
     F_INDEX_INCORRECT_ERROR,
 
-    R_ITEM_NOT_FOUND_ERROR,
+    R_ITEM_NOT_FOUND,
     R_END_OF_ITEM,
+    R_ITEM_PREV_OPENED,
     
     U_INCORRECT_OP_MODE,
     U_ITEM_STILL_OPEN,
