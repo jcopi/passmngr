@@ -1,65 +1,125 @@
-#ifndef __PASSMNGR_ARCHIVE_H
-#define __PASSMNGR_ARCHIVE_H
+#ifndef _ARCHIVE_H_
+#define _ARCHIVE_H_
 
-#include "hashmap/hashmap.h"
-#include "result.h"
-#include <stdlib.h>
+#include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
 
-struct archive_entity {
-    size_t start;
-    size_t header_start;
-    uint64_t length;
-};
-
-enum archive_mode {
-    READ,
-    WRITE,
-};
-
-enum archive_state {
-    IDLE,
-    ARCHIVE_OPEN,
-    ITEM_OPEN,
-};
+// Constants/enums
 
 typedef enum archive_error {
-    READ_FAILED,
-    WRITE_FAILED,
-    SEEK_FAILED,
-    ALLOCATION_FAILED,
+    E_FILE_OPEN_ERROR,
+    E_FILE_READ_ERROR,
+    E_FILE_WRITE_ERROR,
+    E_FILE_SEEK_ERROR,
+
+    F_INDEX_PARSE_ERROR,
+    F_INDEX_INCORRECT_ERROR,
+
+    R_ITEM_NOT_FOUND_ERROR,
+    R_END_OF_ITEM,
+    
+    U_INCORRECT_OP_MODE,
+    U_ITEM_STILL_OPEN,
+    U_ARCHIVE_NOT_OPEN,
 } archive_error_t;
 
+typedef enum archive_mode {
+    READ,
+    WRITE,
+} archive_mode_t;
+
+// archive types
 typedef struct archive {
-    map_t entities;
-    FILE file_stream;
-    enum archive_mode mode;
-    enum archive_state state;
+    FILE* file;
+    archive_mode_t mode;
+
+    bool open;
+    bool borrowed;
+
+    uint8_t* names_buffer;
+    size_t   names_size;
+
+    archive_item_info_t* items;
+    size_t item_count;
+
+    uint64_t index_size;
+    uint64_t item_content_size;
 } archive_t;
 
-result_t_init(archive_t, archive_error_t);
-result_t_init(nil_t, archive_error_t);
+typedef struct archive_item_info {
+    uint8_t* name;
+    uint16_t name_size;
 
-result_t(archive_t, archive_error_t) archive_create(const char* name);
-result_t(archive_t, archive_error_t) archive_open  (const char* name);
+    uint64_t start;
+    uint64_t size;
+} archive_item_info_t;
 
-result_t(nil_t, archive_error_t) archive_close (archive_t* a);
+typedef struct archive_item {
+    archive_t* parent;
+    archive_item_info_t* self;
 
+    uint64_t current;
+} archive_item_t;
 
+// result types (return values)
+#define IS_OK(R)  (R.ok)
+#define IS_ERR(R) (!R.ok)
+#define OK(R,V)   (R.ok = true, R.result.value = V, R)
+#define ERR(R,E)  (R.ok = false, R.result.error = E, R)
 
-// int archive_init   (struct archive* ar);
-//int archive_create (struct archive* ar, const char* name);
-//int archive_open   (struct archive* ar, const char* name);
-// int archive_close  (struct archive* ar);
+typedef struct archive_result {
+    bool ok;
+    union {
+        archive_t value;
+        archive_error_t error;
+    } result;
+} archive_result_t;
 
-int archive_create_item (struct archive* ar, const void* name, size_t name_bytes);
-int archive_write_item  (struct archive* ar, void* buffer, size_t buffer_bytes);
-int archive_close_item  (struct archive* ar);
+typedef struct item_result {
+    bool ok;
+    union {
+        archive_item_t value;
+        archive_error_t error;
+    } result;
+} item_result_t;
 
-int archive_open_item  (struct archive* ar, const void* name, size_t name_bytes);
-int archive_read_item  (struct archive* ar, void* buffer, size_t buffer_bytes);
-int archive_close_item (struct archive* ar);
+typedef struct info_result {
+    bool ok;
+    union {
+        archive_item_info_t value;
+        archive_error_t error;
+    } result;
+} info_result_t;
 
-static int archive_populate_items (struct archive* ar);
+typedef struct size_result {
+    bool ok;
+    union {
+        size_t value;
+        archive_error_t error;
+    } result;
+} size_result_t;
+
+typedef struct empty_result {
+    bool ok;
+    union {
+        archive_error_t error;
+    } result;
+} empty_result_t;
+
+// api
+archive_result_t archive_open        (const char* file_name, archive_mode_t mode);
+empty_result_t   archive_close       (archive_t* ar);
+
+item_result_t    archive_item_open   (archive_t* ar, const uint8_t* name, uint16_t name_size);
+size_result_t    archive_item_read   (archive_item_t* item, uint8_t* buffer, size_t buffer_size);
+size_result_t    archive_item_write  (archive_item_t* item, const uint8_t* buffer, size_t buffer_size);
+empty_result_t   archive_item_close  (archive_item_t* item);
+
+info_result_t    archive_read_info   (archive_t* ar);
+empty_result_t   archive_write_info  (archive_t* ar, archive_item_info_t info);
+
+empty_result_t   archive_parse_index (archive_t* ar);
+empty_result_t   archive_write_index (archive_t* ar);
 
 #endif
