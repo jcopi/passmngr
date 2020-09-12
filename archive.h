@@ -5,8 +5,16 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-// Constants/enums
+/********************************************
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * ******************************************/
 
+// Constants/enums
 typedef enum archive_error {
     E_FILE_OPEN_ERROR,
     E_FILE_READ_ERROR,
@@ -19,10 +27,12 @@ typedef enum archive_error {
     R_ITEM_NOT_FOUND,
     R_END_OF_ITEM,
     R_ITEM_PREV_OPENED,
+    R_ALLOCATION_ERROR,
     
     U_INCORRECT_OP_MODE,
     U_ITEM_STILL_OPEN,
     U_ARCHIVE_NOT_OPEN,
+    U_ITEM_NOT_OPEN,
 } archive_error_t;
 
 typedef enum archive_mode {
@@ -68,6 +78,7 @@ typedef struct archive_item {
 #define IS_ERR(R) (!R.ok)
 #define OK(R,V)   (R.ok = true, R.result.value = V, R)
 #define ERR(R,E)  (R.ok = false, R.result.error = E, R)
+#define OK_EMPTY(R) (R.ok = true, R)
 
 typedef struct archive_result {
     bool ok;
