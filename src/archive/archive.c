@@ -1,7 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "archive.h"
+#include <archive.h>
 
 #define MIN(A,B) ((A) < (B) ? (A) : (B))
 #define MAX(A,B) ((A) > (B) ? (A) : (B))
@@ -49,6 +49,7 @@ archive_result_t archive_open (const char* file_name, archive_mode_t mode)
 
         return OK(result, ar);
     }
+    default: return ERR(result, FATAL_UNEXPECTED);
     }
 }
 
@@ -161,6 +162,7 @@ item_result_t archive_item_open (archive_t* ar, const byte_t* name, NAME_SIZE_TY
 
         return OK(result, item);
     }
+    default: return ERR(result, FATAL_UNEXPECTED);
     }
 }
 
@@ -375,6 +377,8 @@ static empty_result_t archive_write_index (archive_t* ar)
     if (fwrite(&ar->index_bytes, sizeof (ar->index_bytes), 1, ar->file) != 1) {
         return ERR(result, FILE_WRITE_FAILED);
     }
+
+    return OK_EMPTY(result);
 }
 
 static size_result_t archive_find_item (archive_t* ar, const byte_t* name, NAME_SIZE_TYPE name_bytes)

@@ -66,3 +66,6 @@ typings/
 # No need to include libsodium in this repo
 libsodium-stable/
 a.out
+
+bin/*/*
+bin/*

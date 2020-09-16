@@ -31,6 +31,7 @@ typedef enum archive_error {
 
     FATAL_INDEX_MALFORMED,
     FATAL_OUT_OF_MEMORY,
+    FATAL_UNEXPECTED,
 } archive_error_t;
 
 typedef struct archive_item_info {
@@ -77,14 +78,6 @@ typedef struct item_result {
         archive_error_t error;
     } result;
 } item_result_t;
-
-typedef struct info_result {
-    bool is_ok;
-    union {
-        archive_item_info_t value;
-        archive_error_t error;
-    } result;
-} info_result_t;
 
 typedef struct info_ref_result {
     bool is_ok;
