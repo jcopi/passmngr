@@ -6,13 +6,13 @@
 #define MIN(A,B) ((A) < (B) ? (A) : (B))
 #define MAX(A,B) ((A) > (B) ? (A) : (B))
 
-static info_ref_result_t archive_read_info (archive_t* ar, size_t remaining_bytes);
-static size_result_t archive_write_info (archive_t* ar, archive_item_info_t* info);
+static archive_info_ref_result_t archive_read_info (archive_t* ar, size_t remaining_bytes);
+static archive_size_result_t archive_write_info (archive_t* ar, archive_item_info_t* info);
 
-static empty_result_t archive_parse_index (archive_t* ar);
-static empty_result_t archive_write_index (archive_t* ar);
+static archive_empty_result_t archive_parse_index (archive_t* ar);
+static archive_empty_result_t archive_write_index (archive_t* ar);
 
-static size_result_t archive_find_item (archive_t* ar, const byte_t* name, NAME_SIZE_TYPE name_bytes);
+static archive_size_result_t archive_find_item (archive_t* ar, const byte_t* name, NAME_SIZE_TYPE name_bytes);
 
 archive_result_t archive_open (const char* file_name, archive_mode_t mode)
 {
@@ -30,7 +30,7 @@ archive_result_t archive_open (const char* file_name, archive_mode_t mode)
         ar.opened = true;
         ar.mode   = READ;
 
-        empty_result_t er = archive_parse_index(&ar);
+        archive_empty_result_t er = archive_parse_index(&ar);
         if (IS_ERR(er)) {
             return ERR(result, UNWRAP_ERR(er));
         }
@@ -53,18 +53,18 @@ archive_result_t archive_open (const char* file_name, archive_mode_t mode)
     }
 }
 
-empty_result_t archive_close (archive_t* ar)
+archive_empty_result_t archive_close (archive_t* ar)
 {
     assert(ar->opened == true);
     assert(ar->locked == false);
 
-    empty_result_t result = {0};
+    archive_empty_result_t result = {0};
 
     switch (ar->mode) {
     case READ: break;
     case WRITE:
     {
-        empty_result_t er = archive_write_index(ar);
+        archive_empty_result_t er = archive_write_index(ar);
         if (IS_ERR(er)) {
             return ERR(result, UNWRAP_ERR(er));
         }
@@ -85,19 +85,19 @@ empty_result_t archive_close (archive_t* ar)
     return OK_EMPTY(result);
 }
 
-item_result_t archive_item_open (archive_t* ar, const byte_t* name, NAME_SIZE_TYPE name_bytes)
+archive_item_result_t archive_item_open (archive_t* ar, const byte_t* name, NAME_SIZE_TYPE name_bytes)
 {
     assert(ar->opened == true);
     assert(ar->locked == false);
 
     archive_item_t item = {0};
-    item_result_t result = {0};
+    archive_item_result_t result = {0};
 
     switch (ar->mode) {
     case READ:
     {
         assert(ar->indexed == true);
-        size_result_t sr = archive_find_item(ar, name, name_bytes);
+        archive_size_result_t sr = archive_find_item(ar, name, name_bytes);
         if (IS_ERR(sr)) {
             return ERR(result, UNWRAP_ERR(sr));
         }
@@ -120,7 +120,7 @@ item_result_t archive_item_open (archive_t* ar, const byte_t* name, NAME_SIZE_TY
     }
     case WRITE:
     {
-        size_result_t sr = archive_find_item(ar, name, name_bytes);
+        archive_size_result_t sr = archive_find_item(ar, name, name_bytes);
         if (IS_OK(sr)) {
             return ERR(result, RUNTIME_ITEM_PREV_OPENED);
         }
@@ -166,7 +166,7 @@ item_result_t archive_item_open (archive_t* ar, const byte_t* name, NAME_SIZE_TY
     }
 }
 
-size_result_t archive_item_read (archive_item_t* item, byte_t* buffer, size_t buffer_bytes)
+archive_size_result_t archive_item_read (archive_item_t* item, byte_t* buffer, size_t buffer_bytes)
 {
     assert(item->parent->opened == true);
     assert(item->parent->mode == READ);
@@ -174,7 +174,7 @@ size_result_t archive_item_read (archive_item_t* item, byte_t* buffer, size_t bu
     assert(item->parent->indexed == true);
 
     size_t bytes_to_read;
-    size_result_t result = {0};
+    archive_size_result_t result = {0};
 
     size_t bytes_remaining = item->info->bytes - item->current;
     bytes_to_read = MIN(bytes_remaining, buffer_bytes);
@@ -186,13 +186,13 @@ size_result_t archive_item_read (archive_item_t* item, byte_t* buffer, size_t bu
     return OK(result, bytes_to_read);
 }
 
-size_result_t archive_item_write (archive_item_t* item, const byte_t* buffer, size_t buffer_bytes)
+archive_size_result_t archive_item_write (archive_item_t* item, const byte_t* buffer, size_t buffer_bytes)
 {
     assert(item->parent->opened == true);
     assert(item->parent->mode == WRITE);
     assert(item->parent->locked == true);
 
-    size_result_t result = {0};
+    archive_size_result_t result = {0};
 
     if (fwrite(buffer, 1, buffer_bytes, item->parent->file) != buffer_bytes) {
         return ERR(result, FILE_WRITE_FAILED);
@@ -204,12 +204,12 @@ size_result_t archive_item_write (archive_item_t* item, const byte_t* buffer, si
 
     return OK(result, buffer_bytes);
 }
-empty_result_t archive_item_close (archive_item_t* item)
+archive_empty_result_t archive_item_close (archive_item_t* item)
 {
     assert(item->parent->opened == true);
     assert(item->parent->locked == true);
 
-    empty_result_t result = {0};
+    archive_empty_result_t result = {0};
 
     item->parent->locked = false;
 
@@ -224,13 +224,13 @@ empty_result_t archive_item_close (archive_item_t* item)
     return OK_EMPTY(result);
 }
 
-static info_ref_result_t archive_read_info (archive_t* ar, size_t remaining_bytes)
+static archive_info_ref_result_t archive_read_info (archive_t* ar, size_t remaining_bytes)
 {
     assert(ar->opened == true);
     assert(ar->mode == READ);
     assert(ar->locked == false);
 
-    info_ref_result_t result = {0};
+    archive_info_ref_result_t result = {0};
     NAME_SIZE_TYPE name_bytes = 0;
 
     if (remaining_bytes <= sizeof (name_bytes)) {
@@ -268,14 +268,14 @@ static info_ref_result_t archive_read_info (archive_t* ar, size_t remaining_byte
     return OK(result, info);
 }
 
-static size_result_t archive_write_info (archive_t* ar, archive_item_info_t* info)
+static archive_size_result_t archive_write_info (archive_t* ar, archive_item_info_t* info)
 {
     assert(ar->opened == true);
     assert(ar->mode == WRITE);
     assert(ar->locked == false);
 
     size_t bytes_written = 0;
-    size_result_t result = {0};
+    archive_size_result_t result = {0};
 
     if (fwrite(&info->name_bytes, sizeof (info->name_bytes), 1, ar->file) != 1) {
         return ERR(result, FILE_WRITE_FAILED);
@@ -301,7 +301,7 @@ static size_result_t archive_write_info (archive_t* ar, archive_item_info_t* inf
 }
 
 // parse_index will seek to the end of the file, read the total index size, then read the index.
-static empty_result_t archive_parse_index (archive_t* ar)
+static archive_empty_result_t archive_parse_index (archive_t* ar)
 {
     // The conditions covered by the assertions are usage error
     assert(ar->opened == true);
@@ -311,7 +311,7 @@ static empty_result_t archive_parse_index (archive_t* ar)
 
     ar->item_count = 0;
 
-    empty_result_t result = {0};
+    archive_empty_result_t result = {0};
 
     if (fseek(ar->file, -1 * sizeof (ar->index_bytes), SEEK_END) != 0) {
         return ERR(result, FILE_SEEK_FAILED);
@@ -327,7 +327,7 @@ static empty_result_t archive_parse_index (archive_t* ar)
 
     size_t bytes_remaining = ar->index_bytes;
     while (bytes_remaining > 0) {
-        info_ref_result_t ir = archive_read_info(ar, bytes_remaining);
+        archive_info_ref_result_t ir = archive_read_info(ar, bytes_remaining);
         if (IS_ERR(ir)) {
             return ERR(result, UNWRAP_ERR(ir));
         }
@@ -350,13 +350,13 @@ static empty_result_t archive_parse_index (archive_t* ar)
     ar->indexed = true;
     return OK_EMPTY(result);
 }
-static empty_result_t archive_write_index (archive_t* ar)
+static archive_empty_result_t archive_write_index (archive_t* ar)
 {
     assert(ar->opened == true);
     assert(ar->mode == WRITE);
     assert(ar->locked == false);
 
-    empty_result_t result = {0};
+    archive_empty_result_t result = {0};
     size_t bytes_written = 0;
 
     if (fseek(ar->file, 0, SEEK_END) != 0) {
@@ -364,7 +364,7 @@ static empty_result_t archive_write_index (archive_t* ar)
     }
 
     for (size_t i = 0; i < ar->item_count; i++) {
-        size_result_t sr = archive_write_info(ar, ar->items[i]);
+        archive_size_result_t sr = archive_write_info(ar, ar->items[i]);
         if (IS_ERR(sr)) {
             return ERR(result, UNWRAP_ERR(sr));
         }
@@ -381,7 +381,7 @@ static empty_result_t archive_write_index (archive_t* ar)
     return OK_EMPTY(result);
 }
 
-static size_result_t archive_find_item (archive_t* ar, const byte_t* name, NAME_SIZE_TYPE name_bytes)
+static archive_size_result_t archive_find_item (archive_t* ar, const byte_t* name, NAME_SIZE_TYPE name_bytes)
 {
     assert(ar->opened == true);
     // assert(ar->indexed == true);
@@ -389,7 +389,7 @@ static size_result_t archive_find_item (archive_t* ar, const byte_t* name, NAME_
     // assert(ar->mode == READ);
 
     size_t i;
-    size_result_t result = {0};
+    archive_size_result_t result = {0};
 
     for (i = 0; i < ar->item_count; i++) {
         if (ar->items[0]->name_bytes == name_bytes && memcmp(ar->items[i]->name, name, name_bytes) == 0) {

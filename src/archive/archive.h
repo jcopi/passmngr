@@ -6,6 +6,8 @@
 #include <stdbool.h>
 #include <assert.h>
 
+#include <result.h>
+
 #define INDEX_SIZE_TYPE uint64_t
 #define NAME_SIZE_TYPE  uint16_t
 #define ITEM_SIZE_TYPE  uint64_t
@@ -63,44 +65,12 @@ typedef struct archive_item {
     uint64_t current;
 } archive_item_t;
 
-typedef struct archive_result {
-    bool is_ok;
-    union {
-        archive_t value;
-        archive_error_t error;
-    } result;
-} archive_result_t;
 
-typedef struct item_result {
-    bool is_ok;
-    union {
-        archive_item_t value;
-        archive_error_t error;
-    } result;
-} item_result_t;
-
-typedef struct info_ref_result {
-    bool is_ok;
-    union {
-        archive_item_info_t* value;
-        archive_error_t error;
-    } result;
-} info_ref_result_t;
-
-typedef struct size_result {
-    bool is_ok;
-    union {
-        size_t value;
-        archive_error_t error;
-    } result;
-} size_result_t;
-
-typedef struct empty_result {
-    bool is_ok;
-    union {
-        archive_error_t error;
-    } result;
-} empty_result_t;
+RESULT_TYPE(archive_result_t, archive_t, archive_error_t)
+RESULT_TYPE(archive_item_result_t, archive_item_t, archive_error_t)
+RESULT_TYPE(archive_info_ref_result_t, archive_item_info_t*, archive_error_t)
+RESULT_TYPE(archive_size_result_t, size_t, archive_error_t)
+RESULT_EMPTY_TYPE(archive_empty_result_t, archive_error_t)
 
 #define OK(R, V)      (R.is_ok = true, R.result.value = V, R)
 #define ERR(R, E)     (R.is_ok = false, R.result.error = E, R)
@@ -111,11 +81,11 @@ typedef struct empty_result {
 #define UNWRAP_ERR(R) (assert(IS_ERR(R)), R.result.error)
 
 archive_result_t archive_open  (const char* file_name, archive_mode_t mode);
-empty_result_t   archive_close (archive_t* ar);
+archive_empty_result_t   archive_close (archive_t* ar);
 
-item_result_t  archive_item_open  (archive_t* ar, const byte_t* name, NAME_SIZE_TYPE name_bytes);
-size_result_t  archive_item_read  (archive_item_t* item, byte_t* buffer, size_t buffer_bytes);
-size_result_t  archive_item_write (archive_item_t* item, const byte_t* buffer, size_t buffer_bytes);
-empty_result_t archive_item_close (archive_item_t* item);
+archive_item_result_t  archive_item_open  (archive_t* ar, const byte_t* name, NAME_SIZE_TYPE name_bytes);
+archive_size_result_t  archive_item_read  (archive_item_t* item, byte_t* buffer, size_t buffer_bytes);
+archive_size_result_t  archive_item_write (archive_item_t* item, const byte_t* buffer, size_t buffer_bytes);
+archive_empty_result_t archive_item_close (archive_item_t* item);
 
 #endif

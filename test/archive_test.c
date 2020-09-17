@@ -19,9 +19,9 @@ int main () {
     archive_result_t ar = archive_open(file_name, WRITE);
     archive_t archive = UNWRAP(ar);
 
-    item_result_t ir = archive_item_open(&archive, (const byte_t*)item_0_name, strlen(item_0_name));
+    archive_item_result_t ir = archive_item_open(&archive, (const byte_t*)item_0_name, strlen(item_0_name));
     archive_item_t item = UNWRAP(ir);
-    size_result_t sr = archive_item_write(&item, (const byte_t*)item_0_content, strlen(item_0_content));
+    archive_size_result_t sr = archive_item_write(&item, (const byte_t*)item_0_content, strlen(item_0_content));
     printf("Wrote %lu bytes to item '%s'\n", UNWRAP(sr), item_0_name);
     archive_item_close(&item);
 
