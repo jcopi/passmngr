@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wpedantic -g
+CFLAGS = -Wall -Wpedantic -g -std=c18
 INC = -Isrc/archive/ -Isrc/vault/ -Isrc/result/
 STATIC_LIB_DIR = bin/static/
 OBJ_DIR = bin/obj/
@@ -12,6 +12,15 @@ archive_test.o: test/archive_test.c
 	$(CC) -c $(CFLAGS) $(INC) $(LDFLAGS) $< -o $(OBJ_DIR)$@
 
 archive_test: archive_test.o archive.o
+	$(CC) $(CFLAGS) $(INC) $(LDFLAGS) $(addprefix $(OBJ_DIR),$^) -o $(EXEC_DIR)$@
+
+vault.o: src/vault/vault.c src/vault/vault.h archive.o
+	$(CC) -c $(CFLAGS) $(INC) $(LDFLAGS) $< -o $(OBJ_DIR)$@
+
+vault_test.o: test/vault_test.c
+	$(CC) -c $(CFLAGS) $(INC) $(LDFLAGS) $< -o $(OBJ_DIR)$@
+
+vault_test: vault_test.o vault.o
 	$(CC) $(CFLAGS) $(INC) $(LDFLAGS) $(addprefix $(OBJ_DIR),$^) -o $(EXEC_DIR)$@
 
 .phony: clean

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
+#include <threads.h>
 
 #include <result.h>
 #include <archive.h>
@@ -14,7 +15,7 @@ typedef enum vault_mode {
 } vault_mode_t;
 
 typedef enum vault_error {
-
+    AUTH_INVALID_PASSWORD,
 } vault_error_t;
 
 typedef struct vault_aead_key {
@@ -37,11 +38,11 @@ typedef struct vault {
     vault_slice_t* usages;
     size_t key_count;
 
-    uint32_t max_unlocked_time;
-    uint32_t unlock_time;
-    uint32_t current_time;
+    uint64_t max_unlocked_time;
+    uint64_t unlock_time;
+    atomic_uint_least64_t current_time;
 
-    
+    thrd_t timer_thread;
 } vault_t;
 
 typedef struct vault_item {
@@ -72,6 +73,7 @@ typedef struct vault_item_result {
 
 vault_result_t       vault_open   (const char* file_name, vault_mode_t mode);
 vault_empty_result_t vault_unlock (vault_t* v, byte_t* password, size_t password_bytes);
+vault_empty_result_t vault_lock   (vault_t* v);
 vault_empty_result_t vault_close  (vault_t* v);
 
 vault_item_result_t  vault_open_item  (vault_t* v, byte_t* name, uint16_t name_bytes);
