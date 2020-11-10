@@ -12,7 +12,7 @@ static archive_size_result_t archive_write_info (archive_t* ar, archive_item_inf
 static archive_empty_result_t archive_parse_index (archive_t* ar);
 static archive_empty_result_t archive_write_index (archive_t* ar);
 
-static archive_size_result_t archive_find_item (archive_t* ar, const byte_t* name, NAME_SIZE_TYPE name_bytes);
+static archive_size_result_t archive_find_item (archive_t* ar, const byte_t* name, COMMON_ITEM_NAME_TYPE name_bytes);
 
 archive_result_t archive_open (const char* file_name, archive_mode_t mode)
 {
@@ -85,7 +85,12 @@ archive_empty_result_t archive_close (archive_t* ar)
     return OK_EMPTY(result);
 }
 
-archive_item_result_t archive_item_open (archive_t* ar, const byte_t* name, NAME_SIZE_TYPE name_bytes)
+bool archive_has_item (archive_t* ar, const byte_t* name, COMMON_ITEM_NAME_TYPE name_bytes)
+{
+    return IS_OK(archive_find_item(ar, name, name_bytes))
+}
+
+archive_item_result_t archive_item_open (archive_t* ar, const byte_t* name, COMMON_ITEM_NAME_TYPE name_bytes)
 {
     assert(ar->opened == true);
     assert(ar->locked == false);
@@ -231,7 +236,7 @@ static archive_info_ref_result_t archive_read_info (archive_t* ar, size_t remain
     assert(ar->locked == false);
 
     archive_info_ref_result_t result = {0};
-    NAME_SIZE_TYPE name_bytes = 0;
+    COMMON_ITEM_NAME_TYPE name_bytes = 0;
 
     if (remaining_bytes <= sizeof (name_bytes)) {
         return ERR(result, FATAL_INDEX_MALFORMED);
@@ -381,7 +386,7 @@ static archive_empty_result_t archive_write_index (archive_t* ar)
     return OK_EMPTY(result);
 }
 
-static archive_size_result_t archive_find_item (archive_t* ar, const byte_t* name, NAME_SIZE_TYPE name_bytes)
+static archive_size_result_t archive_find_item (archive_t* ar, const byte_t* name, COMMON_ITEM_NAME_TYPE name_bytes)
 {
     assert(ar->opened == true);
     // assert(ar->indexed == true);

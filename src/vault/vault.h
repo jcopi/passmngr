@@ -7,6 +7,7 @@
 #include <threads.h>
 
 #include <result.h>
+#include <common.h>
 #include <archive.h>
 
 typedef enum vault_mode {
@@ -15,11 +16,18 @@ typedef enum vault_mode {
 } vault_mode_t;
 
 typedef enum vault_error {
-    AUTH_INVALID_PASSWORD,
+    AUTH_INVALID_PASSWORD = COMMON_VAULT_ERROR_START,
+    VAULT_MISSING_SALT,
+    VAULT_INVALID_SALT,
+    VAULT_MISSING_KEYS,
+    VAULT_ERROR_HASHING_PASSWORD,
+    VAULT_OUT_OF_MEMORY
 } vault_error_t;
 
+#define VAULT_AEAD_KEY_BYTES (64)
+
 typedef struct vault_aead_key {
-    byte_t bytes[64];
+    byte_t* key_content;
 } vault_aead_key_t;
 
 typedef struct vault_slice {
@@ -48,6 +56,10 @@ typedef struct vault {
 typedef struct vault_item {
     vault_t* parent;
     size_t item_index;
+    
+    crypto_secretstream_xchacha20poly1305_state* state;
+    byte_t* plaintext_buffer;
+    size_t plaintext_bytes;
 } vault_item_t;
 
 RESULT_EMPTY_TYPE(vault_empty_result_t, vault_error_t)
@@ -55,33 +67,17 @@ RESULT_TYPE(vault_result_t, vault_t, vault_error_t)
 RESULT_TYPE(vaule_item_result_t, vault_item_t, vault_error_t)
 RESULT_TYPE(vault_size_result_t, size_t, vault_error_t)
 
-typedef struct vault_result {
-    bool is_ok;
-    union {
-        vault_t value;
-        vault_error_t error;
-    } result;
-} vault_result_t;
-
-typedef struct vault_item_result {
-    bool is_ok;
-    union {
-        vault_item_t value;
-        vault_error_t error;
-    } result;
-} vault_item_result_t;
-
 vault_result_t       vault_open   (const char* file_name, vault_mode_t mode);
 vault_empty_result_t vault_unlock (vault_t* v, byte_t* password, size_t password_bytes);
 vault_empty_result_t vault_lock   (vault_t* v);
 vault_empty_result_t vault_close  (vault_t* v);
 
-vault_item_result_t  vault_open_item  (vault_t* v, byte_t* name, uint16_t name_bytes);
+vault_item_result_t  vault_open_item  (vault_t* v, byte_t* name, COMMON_ITEM_NAME_TYPE name_bytes);
 vault_size_result_t  vault_write_item (vault_item_t* vi, const byte_t* buffer, size_t buffer_bytes);
 vault_size_result_t  vault_read_item  (vault_item_t* vi, byte_t* buffer, size_t buffer_bytes);
 vault_empty_result_t vault_close_item (vault_item_t* vi);
 
-vault_result_t vault_duplicate_except (vault_t* v, byte_t* name, uint16_t name_bytes);
+vault_result_t vault_duplicate_except (vault_t* v, byte_t* name, COMMON_ITEM_NAME_TYPE name_bytes);
 vault_result_t vault_duplicate_rekey  (vault_t* v);
 
 #endif

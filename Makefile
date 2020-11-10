@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wpedantic -g -std=c18
-INC = -Isrc/archive/ -Isrc/vault/ -Isrc/result/
+INC = -Isrc/archive/ -Isrc/vault/ -Isrc/result/ -Isrc/common/
 STATIC_LIB_DIR = bin/static/
 OBJ_DIR = bin/obj/
 EXEC_DIR = bin/exec/
