@@ -21,14 +21,31 @@ typedef enum vault_error {
     VAULT_INVALID_SALT,
     VAULT_MISSING_KEYS,
     VAULT_ERROR_HASHING_PASSWORD,
-    VAULT_OUT_OF_MEMORY
+    VAULT_OUT_OF_MEMORY,
+    VAULT_MEMORY_PROTECTION_FAILED
 } vault_error_t;
 
 #define VAULT_AEAD_KEY_BYTES (64)
 
-typedef struct vault_aead_key {
+typedef struct vault_key {
     byte_t* key_content;
-} vault_aead_key_t;
+    size_t key_bytes;
+} vault_key_t;
+
+typedef enum vault_key_type {
+    VAULT_SSH_PRIVATE_KEY,
+    VAULT_SSH_PUBLIC_KEY,
+    VAULT_AEAD_KEY,
+    VAULT_PUBLIC_KEY,
+    VAULT_PRIVATE_KEY
+} vault_key_type_t;
+
+typedef struct vault_key_usage {
+    vault_key_type_t     type;
+    COMMON_KEY_NAME_TYPE name_bytes;
+    byte_t*              name_content;
+    
+} vault_key_usage_t;
 
 typedef struct vault_slice {
     byte_t* content;
@@ -42,8 +59,8 @@ typedef struct vault {
     bool locked;
     bool opened;
 
-    vault_aead_key_t* keys;
-    vault_slice_t* usages;
+    vault_key_t* keys;
+    vault_key_usages_t* usages;
     size_t key_count;
 
     uint64_t max_unlocked_time;
@@ -59,6 +76,7 @@ typedef struct vault_item {
     
     crypto_secretstream_xchacha20poly1305_state* state;
     byte_t* plaintext_buffer;
+    size_t plaintext_index;
     size_t plaintext_bytes;
 } vault_item_t;
 

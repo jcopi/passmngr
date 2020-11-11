@@ -7,6 +7,8 @@
 #define VAULT_KEYS_NAME_BYTES (4)
 
 vault_item_result_t vault_open_item_with_key(vault_t* v, byte_t* name, COMMON_ITEM_NAME_TYPE name_bytes, byte_t* key);
+vault_empty_result_t vault_parse_keys(vault_item_t* vi);
+void vault_clear_keys(vault_t* v);
 
 vault_result_t vault_open (const char* file_name, vault_mode_t mode)
 {
@@ -42,14 +44,15 @@ vault_result_t vault_open (const char* file_name, vault_mode_t mode)
 
 vault_empty_result_t vault_unlock (vault_t* v, byte_t* password, size_t password_bytes)
 {
-    assert(v.opened);
+    assert(v->opened);
+    assert(!v->borrowed);
 
     vault_empty_result_t result = {0};
 
     byte_t* master_key = NULL;
     byte_t master_salt[crypto_pwhash_SALTBYTES];
 
-    archive_item_result_t maybe_item = archive_item_open(&v.archive, VAULT_SALT_ITEM_NAME, VAULT_SALT_NAME_BYTES);
+    archive_item_result_t maybe_item = archive_item_open(&v->archive, VAULT_SALT_ITEM_NAME, VAULT_SALT_NAME_BYTES);
     if (IS_ERR(maybe_item)) {
         // Handle error
         ERR(result, VAULT_MISSING_SALT);
@@ -67,15 +70,45 @@ vault_empty_result_t vault_unlock (vault_t* v, byte_t* password, size_t password
     if (master_key == NULL) {
         return ERR(result, VAULT_OUT_OF_MEMORY);
     }
+    if (sodium_mprotect_readwrite(master_key) != 0) {
+        sodium_free(master_key);
+        return ERR(result, VAULT_MEMORY_PROTECTION_FAILED)
+    }
 
     if (crypto_pwhash(master_key, crypto_secretstream_xchacha20poly1305_KEYBYTES, password, password_bytes, master_salt,
         crypto_pwhash_OPSLIMIT_SENSITIVE, crypto_pwhash_MEMLIMIT_SENSITIVE, crypto_pwhash_ALG_ARGON2ID13) != 0) {
+        sodium_free(master_key);
         return ERR(result, VAULT_ERROR_HASHING_PASSWORD);
     }
+    if (sodium_mprotect_readonly(master_key) != 0) {
+        sodium_free(master_key);
+        return ERR(result, VAULT_MEMORY_PROTECTION_FAILED)
+    }
 
+    vault_item_result_t maybe_vault_item = vault_open_item_with_key(&v, VAULT_KEY_ITEM_NAME, VAULT_KEYS_NAME_BYTES, master_key);
+    if (IS_ERR(maybe_vault_item)) {
+        sodium_free(master_key);
+        return ERR(result, UNWRAP_ERR(maybe_vault_item));
+    }
+    vault_item_t vault_item = UNWRAP(maybe_vault_item);
 
+    vault_empty_result_t maybe_vault_empty = vault_parse_keys(&vault_item);
+    if (IS_ERR(maybe_vault_empty)) {
+        sodium_free(master_key);
+        return ERR(result, UNWRAP_ERR(maybe_vault_empty));
+    }
+
+    maybe_vault_empty = vault_close_item(&vault_item);
+    if (IS_ERR(maybe_vault_empty)) {
+        sodium_free(master_key);
+        return ERR(result, UNWRAP_ERR(maybe_vault_empty));
+    }
+
+    vault->unlocked = true;
     
+    return OK(result);
 }
+
 vault_empty_result_t vault_lock   (vault_t* v);
 vault_empty_result_t vault_close  (vault_t* v);
 
