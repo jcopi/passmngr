@@ -21,30 +21,41 @@ vault_result_t vault_open (const char* file_name, vault_mode_t mode)
         return ERR(result, UNWRAP_ERR(maybe_archive));
     }
 
+    if (sodium_init() < 0) {
+        return ERR(result, VAULT_CRYPTO_LIB_ERROR);
+    }
+
     vault.archive = UNWRAP(maybe_archive);
 
-    // Verify the existance of necessary items:
-    //  - salt: The salt used of password hashing
-    //  - keys: The file of keys for other items
-    bool has_salt = archive_has_item(&vault.archive, VAULT_SALT_ITEM_NAME, VAULT_SALT_NAME_BYTES);
-    bool has_keys = archive_has_item(&vault.archive, VAULT_KEY_ITEM_NAME, VAULT_KEYS_NAME_BYTES);
-    
-    if (!has_salt) {
-        return ERR(result, VAULT_MISSING_SALT);
+    switch (mode) {
+    case READ:
+        // Verify the existance of necessary items:
+        //  - salt: The salt used of password hashing
+        //  - keys: The file of keys for other items
+        bool has_salt = archive_has_item(&vault.archive, VAULT_SALT_ITEM_NAME, VAULT_SALT_NAME_BYTES);
+        bool has_keys = archive_has_item(&vault.archive, VAULT_KEYS_ITEM_NAME, VAULT_KEYS_NAME_BYTES);
+        
+        if (!has_salt) {
+            return ERR(result, VAULT_MISSING_SALT);
+        }
+
+        if (!has_keys) {
+            return ERR(result, VAULT_MISSING_KEYS);
+        }
+
+        vault.opened = true;
+
+        return OK(result, vault);
+    case WRITE:
+        return OK(result, vault);
+    default: return ERR(result, VAULT_UNKNOWN_MODE);
     }
-
-    if (!has_keys) {
-        return ERR(result, VAULT_MISSING_KEYS);
-    }
-
-    vault.opened = true;
-
-    return OK(result, vault);
 }
 
 vault_empty_result_t vault_unlock (vault_t* v, byte_t* password, size_t password_bytes)
 {
     assert(v->opened);
+    assert(v->locked);
     assert(!v->borrowed);
 
     vault_empty_result_t result = {0};
@@ -68,6 +79,7 @@ vault_empty_result_t vault_unlock (vault_t* v, byte_t* password, size_t password
 
     master_key = sodium_allocarray(crypto_secretstream_xchacha20poly1305_KEYBYTES, 1);
     if (master_key == NULL) {
+        sodium_memzero(master_salt);
         return ERR(result, VAULT_OUT_OF_MEMORY);
     }
     if (sodium_mprotect_readwrite(master_key) != 0) {
@@ -109,10 +121,24 @@ vault_empty_result_t vault_unlock (vault_t* v, byte_t* password, size_t password
     return OK(result);
 }
 
+vault_empty_result_t vault_init (vault_t* v, byte_t* password, size_t password_bytes) {
+    
+}
+
 vault_empty_result_t vault_lock   (vault_t* v);
 vault_empty_result_t vault_close  (vault_t* v);
 
-vault_item_result_t  vault_open_item  (vault_t* v, byte_t* name, COMMON_ITEM_NAME_TYPE name_bytes);
+vault_item_result_t  vault_open_item  (vault_t* v, byte_t* name, COMMON_ITEM_NAME_TYPE name_bytes)
+{
+    assert(v->opened);
+    assert(!v->locked);
+    assert(!v->borrowed);
+
+    size_t i;
+    for (i = 0; i < key_count; i++) {
+        
+    }
+}
 vault_size_result_t  vault_write_item (vault_item_t* vi, const byte_t* buffer, size_t buffer_bytes);
 vault_size_result_t  vault_read_item  (vault_item_t* vi, byte_t* buffer, size_t buffer_bytes);
 vault_empty_result_t vault_close_item (vault_item_t* vi);
