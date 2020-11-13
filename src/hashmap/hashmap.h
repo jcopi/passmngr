@@ -37,7 +37,7 @@ typedef struct map {
 } map_t;
 
 typedef enum map_error {
-    MAP_KEY_NOT_FOUND,
+    MAP_KEY_NOT_FOUND = COMMON_HASHMAP_ERROR_START,
     MAP_OUT_OF_MEMORY
 } map_error_t;
 

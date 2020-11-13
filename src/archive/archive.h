@@ -13,7 +13,7 @@
 
 typedef struct archive_record {
     uint64_t size;
-    byte_t   bytes[AR_FIXED_CHUNK_SIZE];
+    byte_t*  bytes;
     uint64_t prev;
     uint64_t next;
 } archive_record_t;
@@ -25,7 +25,7 @@ typedef struct archive {
     file_mode_t mode;
     
     FILE* file;
-    archive_record_t buffer;
+    byte_t buffer[AR_FIXED_CHUNK_SIZE];
 
     map_t index;
 } archive_t;
@@ -38,18 +38,20 @@ typedef struct archive_item {
 } archive_item_t;
 
 typedef enum archive_error {
-    AR_OUT_OF_MEMORY,
+    AR_OUT_OF_MEMORY = COMMON_ARCHIVE_ERROR_START,
     AR_FILE_OPEN_FAILED,
     AR_FILE_READ_FAILED,
     AR_FILE_WRITE_FAILED,
     AR_FILE_SEEK_FAILED,
     AR_INVALID_OPERATION,
     AR_ITEM_ALREADY_OPEN,
-    AR_INVALID_FORMAT
+    AR_INVALID_FORMAT,
+    AR_INVALID_MODE
 } archive_error_t;
 
 RESULT_TYPE(ar_size_result_t, size_t, archive_error_t)
 RESULT_TYPE(ar_item_result_t, archive_item_t, archive_error_t);
+RESULT_TYPE(ar_record_result_t, archive_record_t, archive_error_t);
 RESULT_EMPTY_TYPE(ar_empty_result_t, archive_error_t);
 
 ar_empty_result_t archive_open  (archive_t* ar, const char* file_name, const file_mode_t mode);
