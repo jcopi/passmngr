@@ -10,6 +10,9 @@
 #include <common.h>
 #include <archive.h>
 
+#define COMMON_STREAM_PLAIN_CHUNK_BYTES  (0x1000) // Encrypted in 4kB Chunks (4096B)
+#define COMMON_STREAM_CIPHER_CHUNK_BYTES (COMMON_STREAM_PLAIN_CHUNK_BYTES + crypto_secretstream_xchacha20poly1305_ABYTES)
+
 typedef enum vault_mode {
     READ,
     WRITE,

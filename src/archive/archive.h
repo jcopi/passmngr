@@ -9,21 +9,48 @@
 #include <result.h>
 #include <common.h>
 
+#define AR_FIXED_CHUNK_SIZE (512)
+
 typedef struct archive_record {
     uint64_t size;
-    byte_t*  bytes;
+    byte_t   bytes[AR_FIXED_CHUNK_SIZE];
     uint64_t prev;
     uint64_t next;
 } archive_record_t;
 
 typedef struct archive {
-    FILE* file;
+    bool opened;
+    bool borrowed;
 
+    file_mode_t mode;
+    
+    FILE* file;
+    archive_record_t buffer;
+
+    map_t index;
 } archive_t;
 
 typedef struct archive_item {
-
+    archive_t* parent;
+    uint64_t root;
+    uint64_t start;
+    uint64_t current;
 } archive_item_t;
+
+typedef enum archive_error {
+    AR_OUT_OF_MEMORY,
+    AR_FILE_OPEN_FAILED,
+    AR_FILE_READ_FAILED,
+    AR_FILE_WRITE_FAILED,
+    AR_FILE_SEEK_FAILED,
+    AR_INVALID_OPERATION,
+    AR_ITEM_ALREADY_OPEN,
+    AR_INVALID_FORMAT
+} archive_error_t;
+
+RESULT_TYPE(ar_size_result_t, size_t, archive_error_t)
+RESULT_TYPE(ar_item_result_t, archive_item_t, archive_error_t);
+RESULT_EMPTY_TYPE(ar_empty_result_t, archive_error_t);
 
 ar_empty_result_t archive_open  (archive_t* ar, const char* file_name, const file_mode_t mode);
 ar_empty_result_t archive_close (archive_t* ar);
