@@ -32,9 +32,9 @@ typedef struct archive {
 
 typedef struct archive_item {
     archive_t* parent;
-    uint64_t root;
-    uint64_t start;
-    uint64_t current;
+    uint64_t first_entry_start;
+    uint64_t current_entry_start;
+    uint64_t bytes_read;
 } archive_item_t;
 
 typedef enum archive_error {
@@ -45,6 +45,7 @@ typedef enum archive_error {
     AR_FILE_SEEK_FAILED,
     AR_INVALID_OPERATION,
     AR_ITEM_ALREADY_OPEN,
+    AR_ITEM_NOT_FOUND,
     AR_INVALID_FORMAT,
     AR_INVALID_MODE
 } archive_error_t;
@@ -61,8 +62,10 @@ ar_item_result_t  archive_item_open   (archive_t* ar, const byte_t* const name, 
 ar_empty_result_t archive_item_close  (archive_item_t* item);
 ar_size_result_t  archive_item_read   (archive_item_t* item, const byte_t* buffer, const size_t buffer_size);
 ar_size_result_t  archive_item_write  (archive_item_t* item, const byte_t* const buffer, const size_t buffer_size);
+ar_size_result_t  archive_item_size   (archive_item_t* item);
+ar_empty_result_t archive_item_seek   (archive_item_t* item, uint64_t location);
 ar_empty_result_t archive_item_delete (archive_item_t* item);
-ar_empty_result_t archive_item_splice (archive_item_t* item, const uint64_t start, const uint64_t size);
+ar_empty_result_t archive_item_splice (archive_item_t* item, const uint64_t start, const uint64_t size, const byte_t* const buffer, const size_t buffer_size);
 
 bool archive_has_item (archive_t* ar, const byte_t* const name, const size_t name_size);
 

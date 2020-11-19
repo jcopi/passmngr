@@ -16,6 +16,8 @@ typedef struct map_node {
     bool      used;
 } map_node_t;
 
+#define WILL_FIT_IN_MAP(T) (sizeof (T) <= sizeof (uintptr_t))
+
 typedef struct map_probe_result {
     bool    found;
     bool    limit_exceeded;
@@ -54,5 +56,7 @@ hm_empty_result_t hm_set      (map_t* hm, const byte_t* key_bytes, size_t key_si
 hm_empty_result_t hm_set_copy (map_t* hm, const byte_t* key_bytes, size_t key_size, uintptr_t value);
 hm_empty_result_t hm_delete   (map_t* hm, const byte_t* key_bytes, size_t key_size, uintptr_t value);
 hm_value_result_t hm_get      (map_t* hm, const byte_t* key_bytes, size_t key_size);
+
+void hm_set_deallocator (map_t* hm, void (*deallocator_fn)(void*));
 
 #endif

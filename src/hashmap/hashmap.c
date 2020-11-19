@@ -396,3 +396,8 @@ hm_value_result_t hm_get (map_t* hm, void* key, size_t key_size)
 
     return ERR(result, MAP_KEY_NOT_FOUND);
 }
+
+void hm_set_deallocator (map_t* hm, void (*deallocator_fn)(void*))
+{
+    hm->deallocator = deallocator_fn;
+}
