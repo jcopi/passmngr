@@ -83,6 +83,10 @@ typedef struct vault_item {
     byte_t* plaintext_buffer;
     size_t plaintext_index;
     size_t plaintext_bytes;
+
+    byte_t* ciphertext_buffer;
+    size_t cipertext_index;
+    size_t ciphertext_bytes;
 } vault_item_t;
 
 RESULT_EMPTY_TYPE(vault_empty_result_t, vault_error_t)
