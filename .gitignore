@@ -66,3 +66,7 @@ typings/
 # No need to include libsodium in this repo
 libsodium-stable/
 a.out
+
+# Added by cargo
+
+/target
