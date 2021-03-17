@@ -1,72 +1,85 @@
 #ifndef PASSMNGR_ARCHIVE_H_
 #define PASSMNGR_ARCHIVE_H_
 
+#include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <stdio.h>
+#include <assert.h>
 
-#include <hashmap.h>
 #include <result.h>
 #include <common.h>
 
-#define AR_FIXED_CHUNK_SIZE (512)
+#define INDEX_SIZE_TYPE uint64_t
+#define ITEM_SIZE_TYPE  uint64_t
+#define ITEM_START_TYPE uint64_t
 
-typedef struct archive_record {
-    uint64_t size;
-    byte_t*  bytes;
-    uint64_t prev;
-    uint64_t next;
-} archive_record_t;
+typedef uint8_t byte_t;
+static_assert(sizeof (byte_t) == 1, "Invalid byte size");
+
+typedef enum archive_mode {
+    READ,
+    WRITE,
+} archive_mode_t;
+
+typedef enum archive_error {
+    FILE_READ_FAILED = COMMON_ARCHIVE_ERROR_START,
+    FILE_WRITE_FAILED,
+    FILE_OPEN_FAILED,
+    FILE_SEEK_FAILED,
+
+    RUNTIME_ITEM_NOT_FOUND,
+    RUNTIME_END_OF_ITEM,
+    RUNTIME_ITEM_PREV_OPENED,
+
+    FATAL_INDEX_MALFORMED,
+    FATAL_OUT_OF_MEMORY,
+    FATAL_UNEXPECTED,
+} archive_error_t;
+
+typedef struct archive_item_info {
+    ITEM_START_TYPE start;
+    ITEM_SIZE_TYPE  bytes;
+    COMMON_ITEM_NAME_TYPE  name_bytes;
+    byte_t          name[];
+} archive_item_info_t;
 
 typedef struct archive {
-    bool opened;
-    bool borrowed;
-
-    file_mode_t mode;
-    
     FILE* file;
-    byte_t buffer[AR_FIXED_CHUNK_SIZE];
+    archive_mode_t mode;
 
-    map_t index;
+    bool opened;
+    bool locked;
+    bool indexed;
+
+    INDEX_SIZE_TYPE index_bytes;
+    size_t items_bytes;
+
+    size_t item_count;
+    archive_item_info_t** items;
 } archive_t;
 
 typedef struct archive_item {
     archive_t* parent;
-    uint64_t first_entry_start;
-    uint64_t current_entry_start;
-    uint64_t bytes_read;
+    archive_item_info_t* info;
+
+    uint64_t current;
 } archive_item_t;
 
-typedef enum archive_error {
-    AR_OUT_OF_MEMORY = COMMON_ARCHIVE_ERROR_START,
-    AR_FILE_OPEN_FAILED,
-    AR_FILE_READ_FAILED,
-    AR_FILE_WRITE_FAILED,
-    AR_FILE_SEEK_FAILED,
-    AR_INVALID_OPERATION,
-    AR_ITEM_ALREADY_OPEN,
-    AR_ITEM_NOT_FOUND,
-    AR_INVALID_FORMAT,
-    AR_INVALID_MODE
-} archive_error_t;
 
-RESULT_TYPE(ar_size_result_t, size_t, archive_error_t)
-RESULT_TYPE(ar_item_result_t, archive_item_t, archive_error_t);
-RESULT_TYPE(ar_record_result_t, archive_record_t, archive_error_t);
-RESULT_EMPTY_TYPE(ar_empty_result_t, archive_error_t);
+RESULT_TYPE(archive_result_t, archive_t, archive_error_t)
+RESULT_TYPE(archive_item_result_t, archive_item_t, archive_error_t)
+RESULT_TYPE(archive_info_ref_result_t, archive_item_info_t*, archive_error_t)
+RESULT_TYPE(archive_size_result_t, size_t, archive_error_t)
+RESULT_EMPTY_TYPE(archive_empty_result_t, archive_error_t)
 
-ar_empty_result_t archive_open  (archive_t* ar, const char* file_name, const file_mode_t mode);
-ar_empty_result_t archive_close (archive_t* ar);
+archive_result_t archive_open  (const char* file_name, archive_mode_t mode);
+archive_empty_result_t   archive_close (archive_t* ar);
 
-ar_item_result_t  archive_item_open   (archive_t* ar, const byte_t* const name, const size_t name_size);
-ar_empty_result_t archive_item_close  (archive_item_t* item);
-ar_size_result_t  archive_item_read   (archive_item_t* item, const byte_t* buffer, const size_t buffer_size);
-ar_size_result_t  archive_item_write  (archive_item_t* item, const byte_t* const buffer, const size_t buffer_size);
-ar_size_result_t  archive_item_size   (archive_item_t* item);
-ar_empty_result_t archive_item_seek   (archive_item_t* item, uint64_t location);
-ar_empty_result_t archive_item_delete (archive_item_t* item);
-ar_empty_result_t archive_item_splice (archive_item_t* item, const uint64_t start, const uint64_t size, const byte_t* const buffer, const size_t buffer_size);
+archive_item_result_t  archive_item_open  (archive_t* ar, const byte_t* name, COMMON_ITEM_NAME_TYPE name_bytes);
+archive_size_result_t  archive_item_read  (archive_item_t* item, byte_t* buffer, size_t buffer_bytes);
+archive_size_result_t  archive_item_write (archive_item_t* item, const byte_t* buffer, size_t buffer_bytes);
+archive_empty_result_t archive_item_close (archive_item_t* item);
 
-bool archive_has_item (archive_t* ar, const byte_t* const name, const size_t name_size);
+bool                   archive_has_item   (archive_t* ar, const byte_t* name, COMMON_ITEM_NAME_TYPE name_bytes);
 
 #endif
