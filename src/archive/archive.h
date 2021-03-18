@@ -72,7 +72,7 @@ RESULT_TYPE(archive_info_ref_result_t, archive_item_info_t*, archive_error_t)
 RESULT_TYPE(archive_size_result_t, size_t, archive_error_t)
 RESULT_EMPTY_TYPE(archive_empty_result_t, archive_error_t)
 
-archive_result_t         archive_open  (const char* file_name, archive_mode_t mode);
+archive_result_t archive_open  (const char* file_name, archive_mode_t mode);
 archive_empty_result_t   archive_close (archive_t* ar);
 
 archive_item_result_t  archive_item_open  (archive_t* ar, const byte_t* name, COMMON_ITEM_NAME_TYPE name_bytes);

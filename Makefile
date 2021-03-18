@@ -1,14 +1,11 @@
 CC = gcc
 CFLAGS = -Wall -Wpedantic -g -std=c18
-INC = -Isrc/archive/ -Isrc/vault/ -Isrc/result/ -Isrc/common/ -Isrc/hashmap
+INC = -Isrc/archive/ -Isrc/vault/ -Isrc/result/ -Isrc/common/ -Isrc/kv_store
 STATIC_LIB_DIR = bin/static/
 OBJ_DIR = bin/obj/
 EXEC_DIR = bin/exec/
 
-fasthash.o: src/hashmap/fasthash.c src/hashmap/fasthash.h
-	$(CC) -c $(CFLAGS) $(INC) $(LDFLAGS) $< -o $(OBJ_DIR)$@
-
-hashmap.o: src/hashmap/hashmap.c src/hashmap/hashmap.h fasthash.o
+kv_store.o: src/kv_store/kv_store.c src/kv_store/kv_store.h
 	$(CC) -c $(CFLAGS) $(INC) $(LDFLAGS) $< -o $(OBJ_DIR)$@
 
 archive.o: src/archive/archive.c src/archive/archive.h hashmap.o
