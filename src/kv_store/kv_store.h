@@ -10,9 +10,15 @@
 
 #include <sodium.h>
 
-#define READ_BUFFER_LENGTH    (2048)
-#define CT_READ_BUFFER_LENGTH (READ_BUFFER_LENGTH + crypto_secretstream_xchacha20poly1305_ABYTES)
+#define PLAINTEXT_CHUNK_SIZE  (2048)
+#define CIPHERTEXT_CHUNK_SIZE (PLAINTEXT_CHUNK_SIZE + crypto_secretstream_xchacha20poly1305_ABYTES)
 #define ENCRYPTED_KEY_LENGTH  (crypto_secretstream_xchacha20poly1305_KEYBYTES + crypto_secretstream_xchacha20poly1305_HEADERBYTES + crypto_secretstream_xchacha20poly1305_ABYTES)
+
+#define ITEM_KEY_LENGTH_INTEGER_TYPE       uint64_t
+#define ITEM_VALUE_LENGTH_INTEGER_TYPE     uint64_t
+#define ITEM_TIMESTAMP_INTEGER_TYPE        uint64_t
+#define ITEM_HEADER_SIZE                   (sizeof (ITEM_KEY_LENGTH_INTEGER_TYPE) + sizeof (ITEM_VALUE_LENGTH_INTEGER_TYPE) + sizeof (ITEM_TIMESTAMP_INTEGER_TYPE))
+#define ITEM_MAX_CONTENT_SIZE              (PLAINTEXT_CHUNK_SIZE - ITEM_HEADER_SIZE)
 
 // Default max unlock time is 5 minutes
 #define DEFAULT_MAX_UNLOCK_TIME (5.0 * 60.0)
@@ -22,16 +28,29 @@
 #define DEFAULT_MAX_KEY_WRITES  (1024)
 
 typedef enum kv_error {
+    // Runtime 'issues' are included first these are expected problems that don't indicate that something is wrong
+    ISSUE_KEY_NOT_FOUND,
+    ISSUE_KEY_LENGTH_INVALID,
+    ISSUE_VALUE_LENGTH_INVALID,
+
+    // Runtime errors indicate things that could happen, but can't be recovered from (file errors, out of memory, etc)
+    RUNTIME_OUT_OF_MEMORY,
+    RUNTIME_FILE_MALFORMED,
+    RUNTIME_ENCRYPTION_FAILED,
+    RUNTIME_CLOCK_ERROR,
+
     FILE_READ_FAILED,
     FILE_WRITE_FAILED,
     FILE_OPEN_FAILED,
     FILE_SEEK_FAILED,
+    FILE_REMOVE_FAILED,
+    FILE_RENAME_FAILED,
 
     RUNTIME_IS_LOCKED,
     RUNTIME_NOT_OPEN,
     RUNTIME_ALREADY_OPEN,
     RUNTIME_ITEM_NOT_FOUND,
-    RUNTIME_ITEM_PREV_OPENED,
+    RUNTIME_ITEM_TOO_LARGE,
 
     FATAL_MALFORMED_FILE,
     FATAL_OUT_OF_MEMORY,
@@ -39,9 +58,25 @@ typedef enum kv_error {
 } kv_error_t;
 
 typedef struct kv_value {
-    byte_t* data;
-    uint64_t length;
+    byte_t data[PLAINTEXT_CHUNK_SIZE];
+    ITEM_VALUE_LENGTH_INTEGER_TYPE length;
 } kv_value_t;
+
+typedef struct kv_key {
+    byte_t data[PLAINTEXT_CHUNK_SIZE];
+    ITEM_KEY_LENGTH_INTEGER_TYPE length;
+} kv_key_t;
+
+typedef struct kv_item {
+    kv_key_t key;
+    kv_value_t value;
+} kv_item_t;
+
+typedef struct kv_item_header {
+    ITEM_KEY_LENGTH_INTEGER_TYPE key_length;
+    ITEM_VALUE_LENGTH_INTEGER_TYPE value_length;
+    ITEM_TIMESTAMP_INTEGER_TYPE timestamp;
+} kv_item_header_t;
 
 typedef struct kv {
     bool initialized;
@@ -53,7 +88,8 @@ typedef struct kv {
     bool kv_empty;
 
     byte_t master_key[crypto_secretstream_xchacha20poly1305_KEYBYTES];
-    byte_t value_buffer[READ_BUFFER_LENGTH];
+    
+    bool tmps_borrowed;
     
     double unlock_start_time_s;
     double max_unlock_time_s;
@@ -65,15 +101,17 @@ typedef struct kv {
 
 RESULT_EMPTY_TYPE(kv_empty_result_t, kv_error_t)
 RESULT_TYPE(kv_value_result_t, kv_value_t, kv_error_t)
+RESULT_TYPE(kv_header_result_t, kv_item_header_t, kv_error_t)
 
 double kv_util_get_monotonic_time();
 bool   kv_util_is_past_expiration(double start_time, double max_time);
 
 kv_empty_result_t kv_init   (kv_t* kv, const char* const read_filename, const char* const write_filename);
-kv_empty_result_t kv_open   (kv_t* kv, const char * const password, uint64_t password_length);
-kv_value_result_t kv_get    (kv_t* kv, kv_value_t key);
-kv_empty_result_t kv_set    (kv_t* kv, kv_value_t key, kv_value_t value);
-kv_empty_result_t kv_delete (kv_t* kv, kv_value_t key);
+kv_empty_result_t kv_create (kv_t* kv, const char * const password, size_t password_length);
+kv_empty_result_t kv_open   (kv_t* kv, const char * const password, size_t password_length);
+kv_value_result_t kv_get    (kv_t* kv, kv_key_t key);
+kv_empty_result_t kv_set    (kv_t* kv, kv_item_t item);
+// kv_empty_result_t kv_delete (kv_t* kv, kv_key_t key);
 kv_empty_result_t kv_close  (kv_t* kv);
 
 #endif
