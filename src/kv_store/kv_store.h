@@ -20,13 +20,6 @@
 #define ITEM_HEADER_SIZE                   (sizeof (ITEM_KEY_LENGTH_INTEGER_TYPE) + sizeof (ITEM_VALUE_LENGTH_INTEGER_TYPE) + sizeof (ITEM_TIMESTAMP_INTEGER_TYPE))
 #define ITEM_MAX_CONTENT_SIZE              (PLAINTEXT_CHUNK_SIZE - ITEM_HEADER_SIZE)
 
-// Default max unlock time is 5 minutes
-#define DEFAULT_MAX_UNLOCK_TIME (5.0 * 60.0)
-// Default key life is 1 year (then a rekey will be done automatically)
-#define DEFAULT_KEY_LIFE        (1 * 365 * 24 * 60 * 60)
-// Default number of writes before a rekey is 1024
-#define DEFAULT_MAX_KEY_WRITES  (1024)
-
 typedef enum kv_error {
     // Runtime 'issues' are included first these are expected problems that don't indicate that something is wrong
     ISSUE_KEY_NOT_FOUND,
@@ -70,6 +63,7 @@ typedef struct kv_key {
 typedef struct kv_item {
     kv_key_t key;
     kv_value_t value;
+    ITEM_TIMESTAMP_INTEGER_TYPE timestamp;
 } kv_item_t;
 
 typedef struct kv_item_header {
@@ -82,26 +76,18 @@ typedef struct kv {
     bool initialized;
     const char* read_filename;
     const char* write_filename;
-    FILE* file;
 
     unsigned long kv_start;
-    bool kv_empty;
 
     byte_t master_key[crypto_secretstream_xchacha20poly1305_KEYBYTES];
     
-    bool tmps_borrowed;
-    
-    double unlock_start_time_s;
-    double max_unlock_time_s;
     bool unlocked;
-
-    uint64_t read_length;
-    uint64_t overflow_length;
 } kv_t;
 
 RESULT_EMPTY_TYPE(kv_empty_result_t, kv_error_t)
 RESULT_TYPE(kv_value_result_t, kv_value_t, kv_error_t)
 RESULT_TYPE(kv_header_result_t, kv_item_header_t, kv_error_t)
+RESULT_TYPE(kv_uint64_result_t, uint64_t, kv_error_t)
 
 double kv_util_get_monotonic_time();
 bool   kv_util_is_past_expiration(double start_time, double max_time);
@@ -113,5 +99,8 @@ kv_value_result_t kv_get    (kv_t* kv, kv_key_t key);
 kv_empty_result_t kv_set    (kv_t* kv, kv_item_t item);
 // kv_empty_result_t kv_delete (kv_t* kv, kv_key_t key);
 kv_empty_result_t kv_close  (kv_t* kv);
+
+kv_empty_result_t  kv_prefixed_get (kv_t* kv, kv_key_t key_prefix, void (*handler)(kv_item_t item));
+kv_uint64_result_t kv_item_count   (kv_t* kv, kv_key_t key_prefix);
 
 #endif

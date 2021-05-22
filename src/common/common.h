@@ -7,4 +7,6 @@
 typedef uint8_t byte_t;
 static_assert(sizeof (byte_t) == 1, "Invalid byte size");
 
+#define countof(A) (sizeof (A) / sizeof (A[0]))
+
 #endif

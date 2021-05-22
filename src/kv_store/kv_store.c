@@ -51,18 +51,6 @@
 
 #endif
 
-void print_hex_memory (char* prefix, void* mem, size_t length)
-{
-    printf("%s (%i B):\n", prefix, (int) length);
-    for (size_t i = 0; i < length; i++) {
-        printf("%02x ", ((unsigned char*)mem)[i]);
-        if (i && !(i % 16)) {
-            printf("\n");
-        }
-    }
-    printf("\n");
-}
-
 bool kv_util_is_past_expiration(double start_time, double max_time)
 {
     double current_time = kv_util_get_monotonic_time();
@@ -162,8 +150,6 @@ kv_empty_result_t kv_init(kv_t* kv, const char* const read_filename, const char*
 
     sodium_memzero(kv->master_key, sizeof (kv->master_key));
 
-    kv->tmps_borrowed = false;
-
     kv->read_filename = read_filename;
     kv->write_filename = write_filename;
 
@@ -186,6 +172,8 @@ kv_empty_result_t kv_create (kv_t* kv, const char * const password, size_t passw
     byte_t encrypted_key_header[crypto_secretstream_xchacha20poly1305_HEADERBYTES];
     crypto_secretstream_xchacha20poly1305_state st;
 
+    FILE* file = NULL;
+
     // if the provided kv is already open do nothing
     // currently this will not be treated as an error, but that may change in the future
     if (kv->unlocked) {
@@ -199,20 +187,18 @@ kv_empty_result_t kv_create (kv_t* kv, const char * const password, size_t passw
         SET_ERR(result, FATAL_OUT_OF_MEMORY);
         goto exit_error;
     }
-
-    kv->max_unlock_time_s = DEFAULT_MAX_UNLOCK_TIME;
     
     // open the file for writing, normally writing would only happen on the `write_filename`
     // in this case since the read file name doesn't exist theres no need to do the write, delete, rename sequence
-    kv->file = fopen(kv->read_filename, "wb");
-    if (kv->file == NULL) {
+    file = fopen(kv->read_filename, "wb");
+    if (file == NULL) {
         SET_ERR(result, FILE_OPEN_FAILED);
         goto exit_error;
     }
 
     // generate and write a master salt
     randombytes_buf(master_salt, sizeof (master_salt));
-    size_t nwritten = fwrite(master_salt, sizeof (byte_t), sizeof (master_salt), kv->file);
+    size_t nwritten = fwrite(master_salt, sizeof (byte_t), sizeof (master_salt), file);
     if (nwritten != sizeof (master_salt)) {
         SET_ERR(result, FILE_WRITE_FAILED);
         goto exit_error;
@@ -234,7 +220,7 @@ kv_empty_result_t kv_create (kv_t* kv, const char * const password, size_t passw
         goto exit_error;
     }
 
-    nwritten = fwrite(encrypted_key_header, sizeof (byte_t), sizeof (encrypted_key_header), kv->file);
+    nwritten = fwrite(encrypted_key_header, sizeof (byte_t), sizeof (encrypted_key_header), file);
     if (nwritten != sizeof (encrypted_key_header)) {
         SET_ERR(result, FILE_WRITE_FAILED);
         goto exit_error;
@@ -246,17 +232,16 @@ kv_empty_result_t kv_create (kv_t* kv, const char * const password, size_t passw
         goto exit_error;
     }
 
-    nwritten = fwrite(encrypted_key_ciphertext, sizeof (byte_t), sizeof (encrypted_key_ciphertext), kv->file);
+    nwritten = fwrite(encrypted_key_ciphertext, sizeof (byte_t), sizeof (encrypted_key_ciphertext), file);
     if (nwritten != sizeof (encrypted_key_ciphertext)) {
         SET_ERR(result, FILE_WRITE_FAILED);
         goto exit_error;
     }
 
-    kv->kv_start = ftell(kv->file);
-    kv->kv_empty = true;
+    kv->kv_start = ftell(file);
 
     // close the file
-    fclose(kv->file);
+    fclose(file);
 
     SET_OK_EMPTY(result);
     goto exit_success;
@@ -292,6 +277,8 @@ kv_empty_result_t kv_open (kv_t* kv, const char * const password, size_t passwor
     byte_t encrypted_key_header[crypto_secretstream_xchacha20poly1305_HEADERBYTES];
     crypto_secretstream_xchacha20poly1305_state st;
 
+    FILE* file = NULL;
+
     // if the provided kv is already open do nothing
     // currently this will not be treated as an error, but that may change in the future
     if (kv->unlocked) {
@@ -306,17 +293,15 @@ kv_empty_result_t kv_open (kv_t* kv, const char * const password, size_t passwor
         goto exit_error;
     }
 
-    kv->max_unlock_time_s = DEFAULT_MAX_UNLOCK_TIME;
-
     // File exists, open it and begin reading the header
-    kv->file = fopen(kv->read_filename, "rb");
-    if (kv->file == NULL) {
+    file = fopen(kv->read_filename, "rb");
+    if (file == NULL) {
         SET_ERR(result, FILE_OPEN_FAILED);
         goto exit_error;
     }
 
     // read the master salt
-    size_t nread = fread(master_salt, sizeof (byte_t), sizeof (master_salt), kv->file);
+    size_t nread = fread(master_salt, sizeof (byte_t), sizeof (master_salt), file);
     if (nread != sizeof (master_salt)) {
         SET_ERR(result, FILE_READ_FAILED);
         goto exit_error;
@@ -331,7 +316,7 @@ kv_empty_result_t kv_open (kv_t* kv, const char * const password, size_t passwor
 
     // decrypt the master key and read it
     unsigned char tag;
-    nread = fread(encrypted_key_header, sizeof (byte_t), sizeof (encrypted_key_header), kv->file);
+    nread = fread(encrypted_key_header, sizeof (byte_t), sizeof (encrypted_key_header), file);
     if (nread != sizeof (encrypted_key_header)) {
         SET_ERR(result, FILE_READ_FAILED);
         goto exit_error;
@@ -342,7 +327,7 @@ kv_empty_result_t kv_open (kv_t* kv, const char * const password, size_t passwor
         goto exit_error;
     }
 
-    nread = fread(encrypted_key_ciphertext, sizeof (byte_t), sizeof (encrypted_key_ciphertext), kv->file);
+    nread = fread(encrypted_key_ciphertext, sizeof (byte_t), sizeof (encrypted_key_ciphertext), file);
     if (nread != sizeof (encrypted_key_ciphertext)) {
         SET_ERR(result, FILE_READ_FAILED);
         goto exit_error;
@@ -354,9 +339,8 @@ kv_empty_result_t kv_open (kv_t* kv, const char * const password, size_t passwor
         goto exit_error;
     }
 
-    kv->unlock_start_time_s = kv_util_get_monotonic_time();
     kv->unlocked = true;
-    kv->kv_start = ftell(kv->file);
+    kv->kv_start = ftell(file);
 
     SET_OK_EMPTY(result);
 
@@ -376,13 +360,14 @@ cleanup:
     sodium_memzero(encrypted_key_header, sizeof (encrypted_key_header));
     sodium_memzero(&st, sizeof (st));
 
+    if (file != NULL) fclose(file);
+
     return result;
 }
 
 kv_value_result_t kv_get (kv_t* kv, kv_key_t key)
 {
     assert(kv->initialized);
-    assert(!kv->tmps_borrowed);
 
     //kv_value_t value = {0};
     kv_value_result_t result = {0};
@@ -391,6 +376,8 @@ kv_value_result_t kv_get (kv_t* kv, kv_key_t key)
     byte_t ct_header[crypto_secretstream_xchacha20poly1305_HEADERBYTES];
     byte_t read_buffer[PLAINTEXT_CHUNK_SIZE];
     crypto_secretstream_xchacha20poly1305_state st;
+
+    FILE* file = NULL;
 
     size_t bytes_read;
 
@@ -411,21 +398,28 @@ kv_value_result_t kv_get (kv_t* kv, kv_key_t key)
         goto exit_error;
     }
 
+    // File exists, open it and begin reading the header
+    file = fopen(kv->read_filename, "rb");
+    if (file == NULL) {
+        SET_ERR(result, FILE_OPEN_FAILED);
+        goto exit_error;
+    }
+
     // Attempt to seek to the start of the kv
-    if (fseek(kv->file, kv->kv_start, SEEK_SET) != 0) {
+    if (fseek(file, kv->kv_start, SEEK_SET) != 0) {
         SET_ERR(result, FILE_SEEK_FAILED);
         goto exit_error;
     }
 
     // If at the end of the file then no entries exist, exit
-    if (feof(kv->file)) {
+    if (feof(file)) {
         SET_ERR(result, RUNTIME_ITEM_NOT_FOUND);
         goto exit_error;
     }
 
     // If there are any entries in the kv store it should have at least HEADERBYTES + ABYTES to read
     // Read the secretstream header
-    bytes_read = fread(ct_header, sizeof (byte_t), sizeof (ct_header), kv->file);
+    bytes_read = fread(ct_header, sizeof (byte_t), sizeof (ct_header), file);
     if (bytes_read != sizeof (ct_header)) {
         SET_ERR(result, FILE_READ_FAILED);
         goto exit_error;
@@ -438,14 +432,14 @@ kv_value_result_t kv_get (kv_t* kv, kv_key_t key)
     
     // If there is not data after the header this will be treated as an error.
     // If the kv is empty the header should not be populated
-    if (feof(kv->file)) {
+    if (feof(file)) {
         SET_ERR(result, FATAL_MALFORMED_FILE);
         goto exit_error;
     }
 
     unsigned char tag;
     do {
-        bytes_read = fread(ct_read_buffer, sizeof (byte_t), sizeof (ct_read_buffer), kv->file);
+        bytes_read = fread(ct_read_buffer, sizeof (byte_t), sizeof (ct_read_buffer), file);
         if (bytes_read != sizeof (ct_read_buffer)) {
             // Data will always be padded (with 0s) to a multiple of the default chunk size
             // That makes this case an error and eliminates the need to handle this particular edge
@@ -491,7 +485,7 @@ kv_value_result_t kv_get (kv_t* kv, kv_key_t key)
                 i += header.key_length + header.value_length;
             }
         }
-    } while (!feof(kv->file) && tag != crypto_secretstream_xchacha20poly1305_TAG_FINAL);
+    } while (!feof(file) && tag != crypto_secretstream_xchacha20poly1305_TAG_FINAL);
 
     SET_ERR(result, RUNTIME_ITEM_NOT_FOUND);
     goto exit_error;
@@ -506,6 +500,8 @@ cleanup:
     sodium_memzero(read_buffer, sizeof (read_buffer));
     sodium_memzero(&st, sizeof (st));
 
+    if (file != NULL) fclose(file);
+
     return result;
 }
 
@@ -516,7 +512,6 @@ kv_empty_result_t kv_set (kv_t* kv, kv_item_t item)
     // the data in the kv needs to be read, decrypted, modified (if applicable), re-encrypted, then written to the new file
 
     assert(kv->initialized);
-    assert(!kv->tmps_borrowed);
 
     kv_empty_result_t result = {0};
 
@@ -525,6 +520,8 @@ kv_empty_result_t kv_set (kv_t* kv, kv_item_t item)
     byte_t buffer[PLAINTEXT_CHUNK_SIZE];
     crypto_secretstream_xchacha20poly1305_state st_in;
     crypto_secretstream_xchacha20poly1305_state st_out;
+
+    FILE* file = NULL;
 
     sodium_memzero(ct_buffer, sizeof (ct_buffer));
     sodium_memzero(ct_header, sizeof (ct_header));
@@ -559,8 +556,15 @@ kv_empty_result_t kv_set (kv_t* kv, kv_item_t item)
         goto exit_error;
     }
 
+    // File exists, open it and begin reading the header
+    file = fopen(kv->read_filename, "rb");
+    if (file == NULL) {
+        SET_ERR(result, FILE_OPEN_FAILED);
+        goto exit_error;
+    }
+
     // Attempt to seek to the start of the read file
-    if (fseek(kv->file, 0, SEEK_SET) != 0) {
+    if (fseek(file, 0, SEEK_SET) != 0) {
         SET_ERR(result, FILE_SEEK_FAILED);
         goto exit_error;
     }
@@ -574,7 +578,7 @@ kv_empty_result_t kv_set (kv_t* kv, kv_item_t item)
 
     // Read the entire starting header from the read file and write it to the write file
     byte_t header_buffer[crypto_pwhash_argon2id_SALTBYTES + crypto_secretstream_xchacha20poly1305_HEADERBYTES + crypto_secretstream_xchacha20poly1305_KEYBYTES + crypto_secretstream_xchacha20poly1305_ABYTES];
-    bytes_read = fread(header_buffer, sizeof (byte_t), sizeof (header_buffer), kv->file);
+    bytes_read = fread(header_buffer, sizeof (byte_t), sizeof (header_buffer), file);
     if (bytes_read != sizeof (header_buffer)) {
         SET_ERR(result, FILE_READ_FAILED);
         goto exit_error;
@@ -597,9 +601,9 @@ kv_empty_result_t kv_set (kv_t* kv, kv_item_t item)
 
     sodium_memzero(ct_header, sizeof (ct_header));
 
-    bytes_read = fread(ct_header, sizeof (byte_t), sizeof (ct_header), kv->file);
+    bytes_read = fread(ct_header, sizeof (byte_t), sizeof (ct_header), file);
     // No items exist yet
-    if (bytes_read != sizeof (ct_header) && feof(kv->file)) {
+    if (bytes_read != sizeof (ct_header) && feof(file)) {
         sodium_memzero(buffer, sizeof (buffer));
         sodium_memzero(ct_buffer, sizeof (ct_buffer));
         kv_empty_result_t maybe_result = __kv_write_item(&buffer, 0, &item);
@@ -631,7 +635,7 @@ kv_empty_result_t kv_set (kv_t* kv, kv_item_t item)
             sodium_memzero(buffer, sizeof (buffer));
             sodium_memzero(ct_buffer, sizeof (ct_buffer));
 
-            bytes_read = fread(ct_buffer, sizeof (byte_t), sizeof (ct_buffer), kv->file);
+            bytes_read = fread(ct_buffer, sizeof (byte_t), sizeof (ct_buffer), file);
             if (bytes_read != sizeof (ct_buffer)) {
                 // Data will always be padded (with 0s) to a multiple of the default chunk size
                 // That makes this case an error and eliminates the need to handle this particular edge
@@ -660,9 +664,7 @@ kv_empty_result_t kv_set (kv_t* kv, kv_item_t item)
                 kv_header_result_t maybe_header = __kv_parse_item_header(&buffer, i);
                 if (IS_ERR(maybe_header)) {
                     SET_ERR(result, UNWRAP_ERR(maybe_header));
-                    print_hex_memory("buffer", buffer, sizeof (buffer));
                     sodium_memzero(buffer, sizeof (buffer));
-                    print_hex_memory("buffer", buffer, sizeof (buffer));
                     goto exit_error;
                 }
 
@@ -747,7 +749,7 @@ kv_empty_result_t kv_set (kv_t* kv, kv_item_t item)
             sodium_memzero(buffer, sizeof (buffer));
             sodium_memzero(ct_buffer, sizeof (ct_buffer));
 
-        } while (!feof(kv->file) && read_tag != crypto_secretstream_xchacha20poly1305_TAG_FINAL);
+        } while (!feof(file) && read_tag != crypto_secretstream_xchacha20poly1305_TAG_FINAL);
     } else {
         SET_ERR(result, FILE_READ_FAILED);
         goto exit_error;
@@ -755,7 +757,7 @@ kv_empty_result_t kv_set (kv_t* kv, kv_item_t item)
     
     // The write file has been successfully created.
     fclose(write_file);
-    fclose(kv->file);
+    fclose(file);
 
     if (remove(kv->read_filename) != 0) {
         SET_ERR(result, FILE_REMOVE_FAILED);
@@ -765,21 +767,6 @@ kv_empty_result_t kv_set (kv_t* kv, kv_item_t item)
         SET_ERR(result, FILE_RENAME_FAILED);
         goto exit_error;
     }
-
-    kv->file = fopen(kv->read_filename, "rb");
-    if (kv->file == NULL) {
-        SET_ERR(result, FILE_OPEN_FAILED);
-        goto exit_error;
-    }
-
-    // seek to the start of the kv entries
-    if (fseek(kv->file, kv->kv_start, SEEK_SET) != 0) {
-        SET_ERR(result, FILE_SEEK_FAILED);
-        goto exit_error;
-    }
-
-    kv->unlock_start_time_s = kv_util_get_monotonic_time();
-    kv->unlocked = true;
 
     SET_OK_EMPTY(result);
     goto exit_success;
@@ -807,9 +794,287 @@ kv_empty_result_t kv_close  (kv_t* kv)
     sodium_memzero(kv->master_key, sizeof (kv->master_key));
     sodium_munlock(kv->master_key, sizeof (kv->master_key));
 
-    if (!kv->unlocked) return OK_EMPTY(result);
-
-    fclose(kv->file);
+    kv->unlocked = false;
 
     return OK_EMPTY(result);
+}
+
+kv_empty_result_t kv_prefixed_get (kv_t* kv, kv_key_t key_prefix, void (*handler)(kv_item_t item))
+{
+    assert(kv->initialized);
+
+    //kv_value_t value = {0};
+    kv_empty_result_t result = {0};
+
+    byte_t ct_read_buffer[CIPHERTEXT_CHUNK_SIZE];
+    byte_t ct_header[crypto_secretstream_xchacha20poly1305_HEADERBYTES];
+    byte_t read_buffer[PLAINTEXT_CHUNK_SIZE];
+    crypto_secretstream_xchacha20poly1305_state st;
+
+    FILE* file = NULL;
+
+    size_t bytes_read;
+
+    if (!kv->unlocked) {
+        SET_ERR(result, RUNTIME_NOT_OPEN);
+        goto exit_error;
+    }
+
+    if (key_prefix.length > ITEM_MAX_CONTENT_SIZE) {
+        // invalid key
+        SET_ERR(result, RUNTIME_ITEM_TOO_LARGE);
+        goto exit_error;
+    }
+
+    // cipher text buffer don't strictly need to be locked
+    if (sodium_mlock(read_buffer, sizeof (read_buffer)) != 0 || sodium_mlock(&st, sizeof (st)) != 0) {
+        SET_ERR(result, FATAL_OUT_OF_MEMORY);
+        goto exit_error;
+    }
+
+    // File exists, open it and begin reading the header
+    file = fopen(kv->read_filename, "rb");
+    if (file == NULL) {
+        SET_ERR(result, FILE_OPEN_FAILED);
+        goto exit_error;
+    }
+
+    // Attempt to seek to the start of the kv
+    if (fseek(file, kv->kv_start, SEEK_SET) != 0) {
+        SET_ERR(result, FILE_SEEK_FAILED);
+        goto exit_error;
+    }
+
+    // If at the end of the file then no entries exist, exit
+    if (feof(file)) {
+        SET_ERR(result, RUNTIME_ITEM_NOT_FOUND);
+        goto exit_error;
+    }
+
+    // If there are any entries in the kv store it should have at least HEADERBYTES + ABYTES to read
+    // Read the secretstream header
+    bytes_read = fread(ct_header, sizeof (byte_t), sizeof (ct_header), file);
+    if (bytes_read != sizeof (ct_header)) {
+        SET_ERR(result, FILE_READ_FAILED);
+        goto exit_error;
+    }
+
+    if (crypto_secretstream_xchacha20poly1305_init_pull(&st, ct_header, kv->master_key) != 0) {
+        SET_ERR(result, FATAL_ENCRYPTION_FAILURE);
+        goto exit_error;
+    }
+    
+    // If there is not data after the header this will be treated as an error.
+    // If the kv is empty the header should not be populated
+    if (feof(file)) {
+        SET_ERR(result, FATAL_MALFORMED_FILE);
+        goto exit_error;
+    }
+
+    unsigned char tag;
+    do {
+        bytes_read = fread(ct_read_buffer, sizeof (byte_t), sizeof (ct_read_buffer), file);
+        if (bytes_read != sizeof (ct_read_buffer)) {
+            // Data will always be padded (with 0s) to a multiple of the default chunk size
+            // That makes this case an error and eliminates the need to handle this particular edge
+            SET_ERR(result, FATAL_MALFORMED_FILE);
+            goto exit_error;
+        }
+        // In addition to padding the end of the kv to a multiple of chunk size, the kv should be padded such that no entry overlaps a chunk.
+        // In practice this means that the total length of the key and value cannot exceed CHUNK SIZE - 24.
+        // This is a substantial limitation, but in the typical usage it should not be particularly detrimental. 
+        if (crypto_secretstream_xchacha20poly1305_pull(&st, read_buffer, NULL, &tag, ct_read_buffer, sizeof (ct_read_buffer), NULL, 0) != 0) {
+            SET_ERR(result, FATAL_ENCRYPTION_FAILURE);
+            goto exit_error;
+        }
+
+        size_t i = 0;
+
+        while (i < sizeof (read_buffer)) {
+            size_t remaining = sizeof (read_buffer) - i;
+            if (remaining <= ITEM_HEADER_SIZE || sodium_is_zero(&read_buffer[i], remaining)) {
+                // An entry could not fit here or all remaining bytes are zero, so the rest must be padded.
+                break;
+            }
+
+            kv_header_result_t maybe_header = __kv_parse_item_header(&read_buffer, i);
+            if (IS_ERR(maybe_header)) {
+                SET_ERR(result, UNWRAP_ERR(maybe_header));
+                goto exit_error;
+            }
+
+            kv_item_header_t header = UNWRAP(maybe_header);
+            i += ITEM_HEADER_SIZE;
+
+            if (header.key_length >= key_prefix.length && sodium_memcmp(&read_buffer[i], key_prefix.data, key_prefix.length) == 0) {
+                // This is a matching key
+                kv_item_t item = {0};
+                if (sodium_mlock(item.key.data, sizeof (item.key.data)) != 0 || sodium_mlock(item.value.data, sizeof (item.value.data)) != 0) {
+                    SET_ERR(result, FATAL_OUT_OF_MEMORY);
+                    goto exit_error;
+                }
+                memcpy(item.key.data, &read_buffer[i], header.key_length);
+                i += header.key_length;
+                memcpy(item.value.data, &read_buffer[i], header.value_length);
+                i += header.value_length;
+                item.key.length = header.key_length;
+                item.value.length = header.value_length;
+                item.timestamp = header.timestamp;
+
+                handler(item);
+            } else {
+                i += header.key_length + header.value_length;
+            }
+        }
+    } while (!feof(file) && tag != crypto_secretstream_xchacha20poly1305_TAG_FINAL);
+
+    SET_OK_EMPTY(result);
+    goto exit_success;
+
+exit_success:
+    goto cleanup;
+exit_error:
+    goto cleanup;
+cleanup:
+    sodium_memzero(ct_header, sizeof (ct_header));
+    sodium_memzero(ct_read_buffer, sizeof (ct_read_buffer));
+    sodium_memzero(read_buffer, sizeof (read_buffer));
+    sodium_memzero(&st, sizeof (st));
+
+    if (file != NULL) fclose(file);
+
+    return result;
+}
+
+kv_uint64_result_t kv_item_count (kv_t* kv, kv_key_t key_prefix)
+{
+    assert(kv->initialized);
+
+    uint64_t count = 0;
+    kv_uint64_result_t result = {0};
+
+    byte_t ct_read_buffer[CIPHERTEXT_CHUNK_SIZE];
+    byte_t ct_header[crypto_secretstream_xchacha20poly1305_HEADERBYTES];
+    byte_t read_buffer[PLAINTEXT_CHUNK_SIZE];
+    crypto_secretstream_xchacha20poly1305_state st;
+
+    FILE* file = NULL;
+
+    size_t bytes_read;
+
+    if (!kv->unlocked) {
+        SET_ERR(result, RUNTIME_NOT_OPEN);
+        goto exit_error;
+    }
+
+    if (key_prefix.length > ITEM_MAX_CONTENT_SIZE) {
+        // invalid key
+        SET_ERR(result, RUNTIME_ITEM_TOO_LARGE);
+        goto exit_error;
+    }
+
+    // cipher text buffer don't strictly need to be locked
+    if (sodium_mlock(read_buffer, sizeof (read_buffer)) != 0 || sodium_mlock(&st, sizeof (st)) != 0) {
+        SET_ERR(result, FATAL_OUT_OF_MEMORY);
+        goto exit_error;
+    }
+
+    // File exists, open it and begin reading the header
+    file = fopen(kv->read_filename, "rb");
+    if (file == NULL) {
+        SET_ERR(result, FILE_OPEN_FAILED);
+        goto exit_error;
+    }
+
+    // Attempt to seek to the start of the kv
+    if (fseek(file, kv->kv_start, SEEK_SET) != 0) {
+        SET_ERR(result, FILE_SEEK_FAILED);
+        goto exit_error;
+    }
+
+    // If at the end of the file then no entries exist, exit
+    if (feof(file)) {
+        SET_ERR(result, RUNTIME_ITEM_NOT_FOUND);
+        goto exit_error;
+    }
+
+    // If there are any entries in the kv store it should have at least HEADERBYTES + ABYTES to read
+    // Read the secretstream header
+    bytes_read = fread(ct_header, sizeof (byte_t), sizeof (ct_header), file);
+    if (bytes_read != sizeof (ct_header)) {
+        SET_ERR(result, FILE_READ_FAILED);
+        goto exit_error;
+    }
+
+    if (crypto_secretstream_xchacha20poly1305_init_pull(&st, ct_header, kv->master_key) != 0) {
+        SET_ERR(result, FATAL_ENCRYPTION_FAILURE);
+        goto exit_error;
+    }
+    
+    // If there is not data after the header this will be treated as an error.
+    // If the kv is empty the header should not be populated
+    if (feof(file)) {
+        SET_ERR(result, FATAL_MALFORMED_FILE);
+        goto exit_error;
+    }
+
+    unsigned char tag;
+    do {
+        bytes_read = fread(ct_read_buffer, sizeof (byte_t), sizeof (ct_read_buffer), file);
+        if (bytes_read != sizeof (ct_read_buffer)) {
+            // Data will always be padded (with 0s) to a multiple of the default chunk size
+            // That makes this case an error and eliminates the need to handle this particular edge
+            SET_ERR(result, FATAL_MALFORMED_FILE);
+            goto exit_error;
+        }
+        // In addition to padding the end of the kv to a multiple of chunk size, the kv should be padded such that no entry overlaps a chunk.
+        // In practice this means that the total length of the key and value cannot exceed CHUNK SIZE - 24.
+        // This is a substantial limitation, but in the typical usage it should not be particularly detrimental. 
+        if (crypto_secretstream_xchacha20poly1305_pull(&st, read_buffer, NULL, &tag, ct_read_buffer, sizeof (ct_read_buffer), NULL, 0) != 0) {
+            SET_ERR(result, FATAL_ENCRYPTION_FAILURE);
+            goto exit_error;
+        }
+
+        size_t i = 0;
+
+        while (i < sizeof (read_buffer)) {
+            size_t remaining = sizeof (read_buffer) - i;
+            if (remaining <= ITEM_HEADER_SIZE || sodium_is_zero(&read_buffer[i], remaining)) {
+                // An entry could not fit here or all remaining bytes are zero, so the rest must be padded.
+                break;
+            }
+
+            kv_header_result_t maybe_header = __kv_parse_item_header(&read_buffer, i);
+            if (IS_ERR(maybe_header)) {
+                SET_ERR(result, UNWRAP_ERR(maybe_header));
+                goto exit_error;
+            }
+
+            kv_item_header_t header = UNWRAP(maybe_header);
+            i += ITEM_HEADER_SIZE;
+
+            if (header.key_length >= key_prefix.length && sodium_memcmp(&read_buffer[i], key_prefix.data, key_prefix.length) == 0) {
+                // This is a matching key
+                count += 1;
+            }
+            i += header.key_length + header.value_length;
+        }
+    } while (!feof(file) && tag != crypto_secretstream_xchacha20poly1305_TAG_FINAL);
+
+    SET_OK(result, count);
+    goto exit_success;
+
+exit_success:
+    goto cleanup;
+exit_error:
+    goto cleanup;
+cleanup:
+    sodium_memzero(ct_header, sizeof (ct_header));
+    sodium_memzero(ct_read_buffer, sizeof (ct_read_buffer));
+    sodium_memzero(read_buffer, sizeof (read_buffer));
+    sodium_memzero(&st, sizeof (st));
+
+    if (file != NULL) fclose(file);
+
+    return result;
 }
