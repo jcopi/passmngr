@@ -5,7 +5,7 @@ LIBS = -Bstatic -l:libsodium.a
 OBJ_DIR = bin/obj/
 EXEC_DIR = bin/exec/
 
-libsodium.a: 
+libsodium.a: deps/libsodium/src/libsodium/include/sodium.h
 	cd deps/libsodium; \
 	./configure; \
 	make && make check

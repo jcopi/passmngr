@@ -1,27 +1,28 @@
 CC = cl.exe
+LINK = link.exe
 CFLAGS = /GS /GZ /Wall /WX -g -std=c18 -Ldeps/libsodium/bin/x64/Debug/v142/dymanic
-INC = /external:I src/archive/ /external:I src/vault/ /external:I src/result/ /external:I src/common/ /external:I src/kv_store /external:I deps/libsodium/src/libsodium/include 
+INC = /experimental:external /external:I src/archive/ /external:I src/vault/ /external:I src/result/ /external:I src/common/ /external:I src/kv_store /external:I deps/libsodium/src/libsodium/include 
 LIBS =  /MT libsodium.lib
 OBJ_DIR = bin/obj/
 EXEC_DIR = bin/exec/
 
 libsodium.lib: 
 	cd deps/libsodium/builds/msvc/vs2019/; \
-	msbuild -m
+	msbuild -m;
 	
-kv_store.o: src/kv_store/kv_store.c src/kv_store/kv_store.h libsodium.lib
+kv_store.obj: src/kv_store/kv_store.c src/kv_store/kv_store.h libsodium.lib
 	$(CC) -c $(CFLAGS) $(INC) $(LDFLAGS) $< $(LIBS) /Fo $(OBJ_DIR)$@
 
-kv_store_test.o: test/kv_store_test.c
+kv_store_test.obj: test/kv_store_test.c
 	$(CC) -c $(CFLAGS) $(INC) $(LDFLAGS) $< $(LIBS) /Fo $(OBJ_DIR)$@
 
-kv_store_test.exe: kv_store_test.o kv_store.o
-	$(CC) $(CFLAGS) $(INC) $(LDFLAGS) $(addprefix $(OBJ_DIR),$^) $(LIBS) /Fe $(EXEC_DIR)$@
+kv_store_test.exe: kv_store_test.obj kv_store.obj
+	$(LINK) $(CFLAGS) $(INC) $(LDFLAGS) -out:$(EXEC_DIR)kv_store_test.exe $(OBJ_DIR)kv_store_test.obj $(OBJ_DIR)kv_store.obj
 
-passmngr.o: src/passmngr.c src/passmngr.h src/wordlist.h
+passmngr.obj: src/passmngr.c src/passmngr.h src/wordlist.h
 	$(CC) -c $(CFLAGS) $(INC) $(LDFLAGS) $< $(LIBS) /Fo $(OBJ_DIR)$@
 
-passmngr.exe: passmngr.o kv_store.o
+passmngr.exe: passmngr.obj kv_store.obj
 	$(CC) $(CFLAGS) $(INC) $(LDFLAGS) $(addprefix $(OBJ_DIR),$^) $(LIBS) /Fe $(EXEC_DIR)$@
 
 .phony: clean
