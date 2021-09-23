@@ -1,7 +1,7 @@
 #ifndef _PASSMNGR_WORDLIST
 #define _PASSMNGR_WORDLIST
 
-const char* const WORDLIST[] {
+const char* const WORDLIST[] = {
     "abacus",
 	"abdomen",
 	"abdominal",
@@ -7778,7 +7778,7 @@ const char* const WORDLIST[] {
 	"zoologist",
 	"zoology",
 	"zoom"
-}
+};
 
 #define WORDLIST_LENGTH (sizeof (WORDLIST) / sizeof (WORDLIST[0]))
 #define MAX_WORD_LENGTH (9) // This is based on documentation of the list, if the list changes this must be updated
