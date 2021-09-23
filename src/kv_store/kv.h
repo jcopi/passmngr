@@ -30,7 +30,11 @@ result_opt_item_t kv_get (kv_t* kv, uint64_t reservation, slice_t key, size_t n)
 
 kv_error_t kv_plain_set (kv_t* kv, slice_t key, slice_t value);
 kv_error_t kv_set (kv_t* kv, slice_t key, slice_t value);
+
+kv_error_t kv_plain_delete (kv_t* kv, slice_t key);
 kv_error_t kv_delete (kv_t* kv, slice_t key);
+
+kv_error_t kv_rekey (kv_t* kv, slice_t new_key);
 
 result_slice_t kv_util_hash_password (slice_t key_dest, slice_t salt, slice_t password);
 slice_t kv_util_fill_rand (slice_t dest);

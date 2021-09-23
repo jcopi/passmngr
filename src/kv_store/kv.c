@@ -144,7 +144,7 @@ kv_error_t __kv_blk_read_full_block (kv_block_t* blk, FILE* file) {
 }
 
 kv_error_t __kv_blk_write_full_block (kv_block_t* blk, FILE* file) {
-    size_t bytes_written = fread(blk->buffer, 1, blk->bytes_produced, file);
+    size_t bytes_written = fwrite(blk->buffer, 1, blk->bytes_produced, file);
     if (bytes_written != blk->bytes_produced) {
         return __kv_gen_error(errno);
     }
@@ -631,7 +631,7 @@ kv_error_t kv_plain_set (kv_t* kv, slice_t key, slice_t value) {
             while (true) {
                 bytes_read = fread(buffer, 1, sizeof (buffer), file);
                 if (bytes_read > 0) {
-                    size_t bytes_written = fwrite(buffer, 1, bytes_read, file);
+                    size_t bytes_written = fwrite(buffer, 1, bytes_read, file_out);
                     if (bytes_written != bytes_read) {
                         ERROR_EXIT();
                         return __kv_gen_error(errno);
@@ -809,7 +809,10 @@ kv_error_t kv_set (kv_t* kv, slice_t key, slice_t value) {
                         return err;
                     }
                     item_set = true;
+                    break;
                 }
+            } else {
+                break;
             }
         }
 
@@ -828,6 +831,7 @@ kv_error_t kv_set (kv_t* kv, slice_t key, slice_t value) {
                     return __kv_gen_error(errno);
                 }
                 sodium_memzero(ct_buffer, sizeof (ct_buffer));
+                break;
             } else {
                 sodium_memzero(ct_buffer, sizeof (ct_buffer));
                 __kv_blk_producer_pad_remaining(&tmp_blk);
@@ -858,6 +862,7 @@ kv_error_t kv_set (kv_t* kv, slice_t key, slice_t value) {
                     return __kv_gen_error(errno);
                 }
                 sodium_memzero(ct_buffer, sizeof (ct_buffer));
+                break;
             }
         } else {
             // Just the end of the block
@@ -1032,6 +1037,8 @@ kv_error_t kv_delete (kv_t* kv, slice_t key) {
                         return err;
                     }
                 }
+            } else {
+                break;
             }
         }
 
@@ -1049,6 +1056,7 @@ kv_error_t kv_delete (kv_t* kv, slice_t key) {
             return __kv_gen_error(errno);
         }
         sodium_memzero(ct_buffer, sizeof (ct_buffer));
+        if (tag == crypto_secretstream_xchacha20poly1305_TAG_FINAL || feof(file)) break;
     }
 
     fclose(file);
