@@ -6,10 +6,6 @@ LIBS = -Bstatic -l:libsodium.a
 OBJ_DIR = bin/obj/
 EXEC_DIR = bin/exec/
 
-init:
-	mkdir -p bin/exec
-	mkdir -p bin/obj
-
 libsodium:
 	mkdir -p deps/libsodium-stable
 	-rm -rf deps/libsodium-stable
@@ -29,20 +25,26 @@ sqlite:
 	unzip deps/sqlite.zip -d deps/sqlite/
 	rm -f deps/sqlite.zip
 
-sqlite.o: init deps/sqlite/sqlite-amalgamation-3380500/sqlite3.c deps/sqlite/sqlite-amalgamation-3380500/sqlite3.h
+sqlite.o: deps/sqlite/sqlite-amalgamation-3380500/sqlite3.c deps/sqlite/sqlite-amalgamation-3380500/sqlite3.h
+	mkdir -p $(OBJ_DIR)
 	$(CC) -c $(SQLITE_FLAGS) $(INC) $(LDFLAGS) $< $(LIBS) -o $(OBJ_DIR)$@
 
-kv.o: init src/kv.c inc/kv.h inc/sum_types.h inc/slice.h
+kv.o: src/kv.c inc/kv.h inc/sum_types.h inc/slice.h
+	mkdir -p $(OBJ_DIR)
 	$(CC) -c $(CFLAGS) $(INC) $(LDFLAGS) $< $(LIBS) -o $(OBJ_DIR)$@
 
-test.o: init src/test.c
+test.o: src/test.c
+	mkdir -p $(OBJ_DIR)
 	$(CC) -c $(CFLAGS) $(INC) $(LDFLAGS) $< $(LIBS) -o $(OBJ_DIR)$@
 
-passmngr.o: init src/passmngr.c inc/passmngr.h
+passmngr.o: src/passmngr.c inc/passmngr.h
+	mkdir -p $(OBJ_DIR)
 	$(CC) -c $(CFLAGS) $(INC) $(LDFLAGS) $< $(LIBS) -o $(OBJ_DIR)$@
 
 test: test.o kv.o sqlite.o
+	mkdir -p $(EXEC_DIR)
 	$(CC) $(CFLAGS) $(INC) $(LDFLAGS) $(addprefix $(OBJ_DIR),$^) $(LIBS) -o $(EXEC_DIR)$@
 
 passmngr: passmngr.o kv.o sqlite.o
+	mkdir -p $(EXEC_DIR)
 	$(CC) $(CFLAGS) $(INC) $(LDFLAGS) $(addprefix $(OBJ_DIR),$^) $(LIBS) -o $(EXEC_DIR)$@
